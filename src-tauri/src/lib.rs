@@ -1,0 +1,850 @@
+//! Folio's native shell.
+//!
+//! The shell is deliberately thin: it owns the window, menus, file dialogs,
+//! recent documents, live file watching, and the theme folder. All Markdown
+//! interpretation lives in `folio-core`.
+
+use base64::Engine as _;
+use folio_core::theme::ThemeCatalog;
+use folio_core::theme::ThemeSet;
+use folio_core::{render, DocumentMeta, RenderOptions};
+use notify::{RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItem, SubmenuBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, Wry};
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_window_state::StateFlags;
+
+const MAX_DOCUMENT_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_IMAGE_BYTES: u64 = 24 * 1024 * 1024;
+const SAMPLE_MARKDOWN: &str = include_str!("../../docs/sample.md");
+const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt", "text",
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentFile {
+    pub path: String,
+    pub name: String,
+    pub directory: String,
+    pub opened_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentPayload {
+    pub path: String,
+    pub name: String,
+    pub html: String,
+    pub meta: DocumentMeta,
+    pub size: u64,
+    pub modified_ms: u64,
+    pub sample: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bootstrap {
+    pub themes: ThemeCatalog,
+    pub recents: Vec<RecentFile>,
+    pub version: String,
+    pub initial_path: Option<String>,
+    pub themes_dir: String,
+    pub platform: String,
+}
+
+pub struct AppState {
+    initial_path: Mutex<Option<PathBuf>>,
+    open_lock: Mutex<()>,
+    booted: AtomicBool,
+    watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    recents: Mutex<Vec<RecentFile>>,
+    themes: ThemeCatalog,
+    themes_dir: PathBuf,
+}
+
+impl AppState {
+    fn new(themes: ThemeCatalog, recents: Vec<RecentFile>, themes_dir: PathBuf) -> Self {
+        Self {
+            initial_path: Mutex::new(None),
+            open_lock: Mutex::new(()),
+            booted: AtomicBool::new(false),
+            watcher: Mutex::new(None),
+            recents: Mutex::new(recents),
+            themes,
+            themes_dir,
+        }
+    }
+}
+
+/* --------------------------------------------------------------------------
+Commands
+-------------------------------------------------------------------------- */
+
+#[tauri::command]
+fn bootstrap(state: State<'_, AppState>) -> Bootstrap {
+    let (initial_path, recents) = {
+        let _guard = state.open_lock.lock().unwrap();
+        let initial = state.initial_path.lock().unwrap().take();
+        state.booted.store(true, Ordering::SeqCst);
+        (initial, state.recents.lock().unwrap().clone())
+    };
+    Bootstrap {
+        themes: state.themes.clone(),
+        recents,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        initial_path: initial_path.map(|path| path.to_string_lossy().into_owned()),
+        themes_dir: state.themes_dir.to_string_lossy().into_owned(),
+        platform: std::env::consts::OS.to_string(),
+    }
+}
+
+#[tauri::command]
+fn show_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+fn set_title(app: AppHandle, title: String) -> Result<(), String> {
+    let clean: String = title
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(180)
+        .collect();
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_title(&clean).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn render_document(
+    app: AppHandle,
+    path: String,
+    anchor: Option<String>,
+) -> Result<DocumentPayload, String> {
+    let _ = anchor;
+    let path = path_from_input(&path)?;
+    let payload = load_document(&path)?;
+    state_watch(&app, &path);
+    record_recent(&app, &path);
+    Ok(payload)
+}
+
+#[tauri::command]
+async fn open_file_dialog(app: AppHandle) -> Result<Option<DocumentPayload>, String> {
+    let selected = app
+        .dialog()
+        .file()
+        .add_filter(
+            "Markdown",
+            &["md", "markdown", "mdown", "mkd", "mkdn", "mdx"],
+        )
+        .add_filter("Text", &["txt", "text"])
+        .blocking_pick_file();
+    let Some(file) = selected else {
+        return Ok(None);
+    };
+    let path = file.into_path().map_err(|e| e.to_string())?;
+    let payload = load_document(&path)?;
+    state_watch(&app, &path);
+    record_recent(&app, &path);
+    Ok(Some(payload))
+}
+
+#[tauri::command]
+fn open_sample(app: AppHandle) -> Result<DocumentPayload, String> {
+    // A sample is not watched; stop watching the previous document.
+    *app.state::<AppState>().watcher.lock().unwrap() = None;
+    let rendered = render(SAMPLE_MARKDOWN, &RenderOptions::default());
+    Ok(DocumentPayload {
+        path: String::new(),
+        name: "sample.md".to_string(),
+        html: rendered.html,
+        meta: rendered.meta,
+        size: SAMPLE_MARKDOWN.len() as u64,
+        modified_ms: 0,
+        sample: true,
+    })
+}
+
+#[tauri::command]
+fn read_image(path: String) -> Result<String, String> {
+    let path = PathBuf::from(&path);
+    let metadata = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if !metadata.is_file() {
+        return Err("Not an image file.".into());
+    }
+    if metadata.len() > MAX_IMAGE_BYTES {
+        return Err("That image is too large to preview.".into());
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mime = image_mime(&bytes)
+        .ok_or_else(|| "Folio previews PNG, JPEG, GIF, WebP, and AVIF images.".to_string())?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:{mime};base64,{encoded}"))
+}
+
+#[tauri::command]
+fn open_external(app: AppHandle, url: String) -> Result<(), String> {
+    let parsed = tauri::Url::parse(url.trim()).map_err(|e| e.to_string())?;
+    match parsed.scheme() {
+        "http" | "https" | "ftp" | "mailto" | "tel" => {}
+        _ => return Err("Folio only opens web, email, and phone links.".into()),
+    }
+    app.opener()
+        .open_url(parsed.to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_path(app: AppHandle, path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !path.exists() {
+        return Err("That file no longer exists.".into());
+    }
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reveal_themes(app: AppHandle) -> Result<(), String> {
+    let dir = app.state::<AppState>().themes_dir.clone();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/* --------------------------------------------------------------------------
+Documents
+-------------------------------------------------------------------------- */
+
+fn supported(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .is_some_and(|ext| SUPPORTED_EXTENSIONS.contains(&ext.as_str()))
+}
+
+fn load_document(path: &Path) -> Result<DocumentPayload, String> {
+    let path = std::fs::canonicalize(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if !path.is_file() {
+        return Err("That is not a file.".into());
+    }
+    if !supported(&path) {
+        return Err("Folio reads Markdown and plain text files.".into());
+    }
+    let metadata = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if metadata.len() > MAX_DOCUMENT_BYTES {
+        return Err("That file is larger than 16 MB. Folio is a reader, not a database.".into());
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let source = String::from_utf8_lossy(&bytes);
+    let rendered = render(&source, &RenderOptions::for_file(&path));
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Untitled")
+        .to_string();
+    let modified_ms = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_millis() as u64);
+    Ok(DocumentPayload {
+        path: path.to_string_lossy().into_owned(),
+        name,
+        html: rendered.html,
+        meta: rendered.meta,
+        size: metadata.len(),
+        modified_ms,
+        sample: false,
+    })
+}
+
+fn state_watch(app: &AppHandle, path: &Path) {
+    match watch_document(app, path) {
+        Ok(()) => {}
+        Err(error) => {
+            let _ = app.emit(
+                "folio:document-error",
+                serde_json::json!({ "message": format!("Live reload is unavailable: {error}") }),
+            );
+        }
+    }
+}
+
+fn watch_document(app: &AppHandle, path: &Path) -> Result<(), String> {
+    let target = path.to_path_buf();
+    let directory = target
+        .parent()
+        .ok_or_else(|| "The file has no parent directory.".to_string())?
+        .to_path_buf();
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
+        if let Ok(event) = result {
+            let _ = tx.send(event);
+        }
+    })
+    .map_err(|e| e.to_string())?;
+    watcher
+        .watch(&directory, RecursiveMode::NonRecursive)
+        .map_err(|e| e.to_string())?;
+
+    app.state::<AppState>()
+        .watcher
+        .lock()
+        .unwrap()
+        .replace(watcher);
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        while let Ok(first) = rx.recv() {
+            let mut relevant = event_touches(&first, &target);
+            let deadline = Instant::now() + Duration::from_millis(160);
+            while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+                match rx.recv_timeout(remaining) {
+                    Ok(event) => relevant |= event_touches(&event, &target),
+                    Err(_) => break,
+                }
+            }
+            if !relevant {
+                continue;
+            }
+            // Writers finish slightly after the first event; a short pause
+            // avoids rendering a half-written file.
+            std::thread::sleep(Duration::from_millis(60));
+            let result = load_document(&target).or_else(|_| {
+                std::thread::sleep(Duration::from_millis(90));
+                load_document(&target)
+            });
+            match result {
+                Ok(payload) => {
+                    let _ = app.emit("folio:document-update", payload);
+                }
+                Err(error) => {
+                    let _ = app.emit(
+                        "folio:document-error",
+                        serde_json::json!({
+                            "message": error,
+                            "path": target.to_string_lossy(),
+                        }),
+                    );
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+fn event_touches(event: &notify::Event, target: &Path) -> bool {
+    event.paths.iter().any(|path| {
+        path == target
+            || path
+                .file_name()
+                .is_some_and(|name| Some(name) == target.file_name())
+    })
+}
+
+fn path_from_input(input: &str) -> Result<PathBuf, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("No document was selected.".into());
+    }
+    if trimmed.starts_with("file:") {
+        if !valid_percent_escapes(trimmed) {
+            return Err("Invalid file URL.".into());
+        }
+        let url = tauri::Url::parse(trimmed).map_err(|e| e.to_string())?;
+        return url
+            .to_file_path()
+            .map_err(|_| "Invalid file URL.".to_string());
+    }
+    Ok(PathBuf::from(trimmed))
+}
+
+fn valid_percent_escapes(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len()
+                || !bytes[index + 1].is_ascii_hexdigit()
+                || !bytes[index + 2].is_ascii_hexdigit()
+            {
+                return false;
+            }
+            index += 3;
+        } else {
+            index += 1;
+        }
+    }
+    true
+}
+
+fn image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("image/png");
+    }
+    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("image/jpeg");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    if bytes.len() >= 12
+        && bytes.starts_with(b"RIFF")
+        && bytes.get(8..12) == Some(b"WEBP".as_slice())
+    {
+        return Some("image/webp");
+    }
+    if bytes.len() >= 12 && bytes.get(4..8) == Some(b"ftyp".as_slice()) {
+        let brand = bytes.get(8..12);
+        if brand == Some(b"avif".as_slice()) || brand == Some(b"avis".as_slice()) {
+            return Some("image/avif");
+        }
+    }
+    None
+}
+
+/* --------------------------------------------------------------------------
+Recents
+-------------------------------------------------------------------------- */
+
+fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_config_dir().map_err(|e| e.to_string())
+}
+
+fn recents_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(config_dir(app)?.join("recents.json"))
+}
+
+fn load_recents(app: &AppHandle) -> Vec<RecentFile> {
+    let Ok(path) = recents_path(app) else {
+        return Vec::new();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut recents: Vec<RecentFile> = serde_json::from_str(&text).unwrap_or_default();
+    recents.retain(|recent| Path::new(&recent.path).is_file());
+    recents.truncate(10);
+    recents
+}
+
+fn record_recent(app: &AppHandle, path: &Path) {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Untitled")
+        .to_string();
+    let directory = path
+        .parent()
+        .map(|parent| parent.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let recent = RecentFile {
+        path: path.to_string_lossy().into_owned(),
+        name,
+        directory,
+        opened_at: now_ms(),
+    };
+
+    let state = app.state::<AppState>();
+    let list = {
+        let mut recents = state.recents.lock().unwrap();
+        recents.retain(|item| item.path != recent.path);
+        recents.insert(0, recent);
+        recents.truncate(10);
+        recents.clone()
+    };
+    if let Ok(path) = recents_path(app) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(text) = serde_json::to_vec_pretty(&list) {
+            let temp = path.with_extension("json.tmp");
+            if std::fs::write(&temp, text).is_ok() {
+                let _ = std::fs::rename(&temp, &path);
+            }
+        }
+    }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_millis() as u64)
+}
+
+/* --------------------------------------------------------------------------
+Menu
+-------------------------------------------------------------------------- */
+
+fn item(
+    app: &AppHandle,
+    id: &str,
+    label: &str,
+    accelerator: Option<&str>,
+) -> tauri::Result<MenuItem<Wry>> {
+    MenuItem::with_id(app, id, label, true, accelerator)
+}
+
+fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<Wry>> {
+    let about = AboutMetadataBuilder::new()
+        .name(Some("Folio"))
+        .version(Some(env!("CARGO_PKG_VERSION")))
+        .short_version(Some(env!("CARGO_PKG_VERSION")))
+        .copyright(Some("© 2026 Folio contributors"))
+        .credits(Some("A quiet reader for Markdown."))
+        .build();
+
+    let app_menu = SubmenuBuilder::new(app, "Folio")
+        .about(Some(about))
+        .separator()
+        .item(&item(app, "settings", "Settings…", Some("CmdOrCtrl+,"))?)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&item(app, "open", "Open…", Some("CmdOrCtrl+O"))?)
+        .item(&item(
+            app,
+            "open-sample",
+            "Open Sample",
+            Some("CmdOrCtrl+Shift+O"),
+        )?)
+        .separator()
+        .item(&item(app, "reload", "Reload", Some("CmdOrCtrl+R"))?)
+        .separator()
+        .close_window()
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&item(
+            app,
+            "toggle-outline",
+            "Toggle Contents",
+            Some("CmdOrCtrl+B"),
+        )?)
+        .item(&item(app, "find", "Find…", Some("CmdOrCtrl+F"))?)
+        .separator()
+        .item(&item(
+            app,
+            "text-larger",
+            "Larger Text",
+            Some("CmdOrCtrl+="),
+        )?)
+        .item(&item(
+            app,
+            "text-smaller",
+            "Smaller Text",
+            Some("CmdOrCtrl+-"),
+        )?)
+        .item(&item(
+            app,
+            "text-reset",
+            "Actual Text Size",
+            Some("CmdOrCtrl+0"),
+        )?)
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .fullscreen()
+        .build()?;
+
+    MenuBuilder::new(app)
+        .item(&app_menu)
+        .item(&file_menu)
+        .item(&edit_menu)
+        .item(&view_menu)
+        .item(&window_menu)
+        .build()
+}
+
+fn handle_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    let action = match event.id().as_ref() {
+        "settings" => "theme",
+        "open" => "open",
+        "open-sample" => "open-sample",
+        "reload" => "reload",
+        "toggle-outline" => "toggle-outline",
+        "find" => "find",
+        "text-larger" => "text-larger",
+        "text-smaller" => "text-smaller",
+        "text-reset" => "text-reset",
+        _ => return,
+    };
+    focus_main_window(app);
+    let _ = app.emit("folio:menu", serde_json::json!({ "action": action }));
+}
+
+/* --------------------------------------------------------------------------
+Host file-open events
+-------------------------------------------------------------------------- */
+
+#[cfg(target_os = "macos")]
+fn register_open(app: &AppHandle, path: PathBuf) {
+    let state = app.state::<AppState>();
+    let emit = {
+        let _guard = state.open_lock.lock().unwrap();
+        if state.booted.load(Ordering::SeqCst) {
+            true
+        } else {
+            *state.initial_path.lock().unwrap() = Some(path.clone());
+            false
+        }
+    };
+    if emit {
+        focus_main_window(app);
+        let _ = app.emit(
+            "folio:open-document",
+            serde_json::json!({ "path": path.to_string_lossy() }),
+        );
+    }
+}
+
+fn focus_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/* --------------------------------------------------------------------------
+App
+-------------------------------------------------------------------------- */
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let initial_path = std::env::args()
+        .skip(1)
+        .filter(|arg| !arg.starts_with('-'))
+        .map(PathBuf::from)
+        .find(|path| path.is_file());
+
+    let builder = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                // Visibility is driven by the first render, not by the last run.
+                .with_state_flags(
+                    StateFlags::SIZE
+                        | StateFlags::POSITION
+                        | StateFlags::MAXIMIZED
+                        | StateFlags::FULLSCREEN
+                        | StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .on_menu_event(handle_menu)
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // A reader should reopen where it left off; the dock icon
+                // (RunEvent::Reopen) and menu actions bring the window back.
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (window, event);
+            }
+        })
+        .setup(move |app| {
+            let config = config_dir(app.handle()).unwrap_or_else(|_| std::env::temp_dir());
+            let _ = std::fs::create_dir_all(&config);
+            let themes_dir = config.join("themes");
+            let _ = std::fs::create_dir_all(&themes_dir);
+
+            let theme_set = ThemeSet::builtin().with_user_dirs(std::slice::from_ref(&themes_dir));
+            let themes = theme_set.catalog();
+            let recents = load_recents(app.handle());
+            let state = AppState::new(themes, recents, themes_dir);
+            if let Some(path) = initial_path {
+                *state.initial_path.lock().unwrap() = Some(path);
+            }
+            app.manage(state);
+
+            let menu = build_menu(app.handle())?;
+            app.set_menu(menu)?;
+
+            // If the frontend never finishes booting, still show the window
+            // rather than leaving an invisible process behind.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(1400));
+                if let Some(window) = handle.get_webview_window("main") {
+                    let _ = window.show();
+                }
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            bootstrap,
+            show_window,
+            set_title,
+            render_document,
+            open_file_dialog,
+            open_sample,
+            read_image,
+            open_external,
+            open_path,
+            reveal_themes
+        ]);
+
+    builder
+        .build(tauri::generate_context!())
+        .expect("error while building Folio")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            match event {
+                tauri::RunEvent::Opened { urls } => {
+                    if let Some(path) = urls.iter().find_map(|url| url.to_file_path().ok()) {
+                        register_open(app, path);
+                    }
+                }
+                tauri::RunEvent::Reopen { .. } => focus_main_window(app),
+                _ => {}
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app, event);
+            }
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn png_signature() -> Vec<u8> {
+        let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+        bytes.extend_from_slice(&[0; 16]);
+        bytes
+    }
+
+    #[test]
+    fn detects_raster_image_types() {
+        assert_eq!(image_mime(&png_signature()), Some("image/png"));
+        assert_eq!(
+            image_mime(&[0xff, 0xd8, 0xff, 0xdb, 0x00]),
+            Some("image/jpeg")
+        );
+        assert_eq!(image_mime(b"GIF89a...."), Some("image/gif"));
+
+        let mut webp = b"RIFF".to_vec();
+        webp.extend_from_slice(&[0, 0, 0, 0]);
+        webp.extend_from_slice(b"WEBPVP8 ");
+        assert_eq!(image_mime(&webp), Some("image/webp"));
+
+        let mut avif = b"\0\0\0\x1cftyp".to_vec();
+        avif.extend_from_slice(b"avif");
+        assert_eq!(image_mime(&avif), Some("image/avif"));
+
+        assert_eq!(
+            image_mime(b"<svg xmlns=\"http://www.w3.org/2000/svg\">"),
+            None
+        );
+        assert_eq!(image_mime(b"not an image"), None);
+    }
+
+    #[test]
+    fn only_markdown_and_text_extensions_are_supported() {
+        for name in [
+            "a.md",
+            "b.MARKDOWN",
+            "c.mdown",
+            "d.mkd",
+            "e.mkdn",
+            "f.mdx",
+            "g.txt",
+        ] {
+            assert!(supported(Path::new(name)), "{name}");
+        }
+        for name in ["a.png", "b.pdf", "c.html", "d"] {
+            assert!(!supported(Path::new(name)), "{name}");
+        }
+    }
+
+    #[test]
+    fn file_urls_and_plain_paths_are_accepted() {
+        let plain = path_from_input("/tmp/note.md").unwrap();
+        assert_eq!(plain, PathBuf::from("/tmp/note.md"));
+
+        let url = path_from_input("file:///tmp/note%20one.md").unwrap();
+        assert_eq!(url, PathBuf::from("/tmp/note one.md"));
+
+        assert!(path_from_input("  ").is_err());
+        assert!(path_from_input("file:///tmp/%ZZ").is_err());
+    }
+
+    #[test]
+    fn loads_a_markdown_document_with_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("note.md");
+        std::fs::write(
+            &path,
+            "---\ntitle: A Note\nauthor: Ada\n---\n\n# A Note\n\nThree quiet words.\n",
+        )
+        .unwrap();
+
+        let payload = load_document(&path).unwrap();
+        assert_eq!(payload.name, "note.md");
+        assert!(payload.path.ends_with("note.md"));
+        assert_eq!(payload.meta.title.as_deref(), Some("A Note"));
+        assert_eq!(payload.meta.author.as_deref(), Some("Ada"));
+        assert!(payload.html.contains("Three quiet words."));
+        assert!(!payload.sample);
+        assert!(payload.size > 0);
+        assert!(payload.modified_ms > 0);
+    }
+
+    #[test]
+    fn rejects_unsupported_documents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("note.png");
+        std::fs::write(&path, b"\x89PNG\r\n\x1a\n").unwrap();
+        let error = load_document(&path).unwrap_err();
+        assert!(error.contains("Markdown and plain text"));
+
+        let missing = load_document(&dir.path().join("missing.md")).unwrap_err();
+        assert!(!missing.is_empty());
+    }
+
+    #[test]
+    fn timestamps_are_plausible() {
+        assert!(now_ms() > 1_700_000_000_000);
+    }
+}

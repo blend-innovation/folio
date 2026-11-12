@@ -1,0 +1,49 @@
+{
+  "id": "blend",
+  "name": "Blend",
+  "description": "Warm cream, sage, and a quiet serif. The Folio default.",
+  "appearance": "light",
+  "counterpart": "blend-dark",
+  "colors": {
+    "canvas": "#FAF9F6",
+    "surface": "#FFFFFF",
+    "surfaceMuted": "#F4F3EE",
+    "ink": "#1C1C1E",
+    "muted": "#636366",
+    "subtle": "#6E6E73",
+    "accent": "#5C9C7C",
+    "accentStrong": "#3F7A5D",
+    "accentSoft": "#F1F8F4",
+    "accentLine": "#E3F0E8",
+    "warm": "#A94F39",
+    "warmSoft": "#F8EDEA",
+    "rule": "#E8E5DE",
+    "selection": "#D9E9DF",
+    "shadow": "rgba(28, 28, 30, 0.06)"
+  },
+  "fonts": {
+    "body": "\"Manrope\", ui-sans-serif, -apple-system, sans-serif",
+    "display": "\"Newsreader\", ui-serif, \"New York\", Georgia, serif",
+    "mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "layout": {
+    "measure": "42rem",
+    "radius": "14px",
+    "bodySize": "17px",
+    "lineHeight": 1.72,
+    "titleSize": "3.35rem"
+  },
+  "syntax": {
+    "comment": "#6F7075",
+    "string": "#4B7A5F",
+    "number": "#946330",
+    "keyword": "#B05D47",
+    "function": "#2F6B57",
+    "typeName": "#6B5D48",
+    "property": "#5B6F7E",
+    "tag": "#B05D47",
+    "attribute": "#8A6838",
+    "punctuation": "#6F6D68",
+    "operator": "#5F5D58"
+  }
+}

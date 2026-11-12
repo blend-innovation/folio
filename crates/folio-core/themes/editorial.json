@@ -1,0 +1,49 @@
+{
+  "id": "editorial",
+  "name": "Editorial",
+  "description": "Warm paper, serif prose, and terracotta ink. Built for long reads.",
+  "appearance": "light",
+  "counterpart": "editorial-dark",
+  "colors": {
+    "canvas": "#F7F2E7",
+    "surface": "#FCF8EF",
+    "surfaceMuted": "#EFE8D9",
+    "ink": "#27231C",
+    "muted": "#625A4C",
+    "subtle": "#6F6A60",
+    "accent": "#9C5B3F",
+    "accentStrong": "#7E4630",
+    "accentSoft": "#F3E6DB",
+    "accentLine": "#E8D8C8",
+    "warm": "#9C4E3B",
+    "warmSoft": "#F5E4DA",
+    "rule": "#E3D8C6",
+    "selection": "#EADCC9",
+    "shadow": "rgba(61, 46, 28, 0.08)"
+  },
+  "fonts": {
+    "body": "\"Newsreader\", ui-serif, \"New York\", Georgia, serif",
+    "display": "\"Newsreader\", ui-serif, \"New York\", Georgia, serif",
+    "mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "layout": {
+    "measure": "40rem",
+    "radius": "3px",
+    "bodySize": "18.5px",
+    "lineHeight": 1.7,
+    "titleSize": "3.7rem"
+  },
+  "syntax": {
+    "comment": "#7A7164",
+    "string": "#55704F",
+    "number": "#916530",
+    "keyword": "#8F4F38",
+    "function": "#4F6B55",
+    "typeName": "#6D5A40",
+    "property": "#5F6B6A",
+    "tag": "#8F4F38",
+    "attribute": "#8A6A3B",
+    "punctuation": "#6F6759",
+    "operator": "#6C6355"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "blend-dark",
+  "name": "Blend Dark",
+  "description": "Blend after dark: warm charcoal and soft sage.",
+  "appearance": "dark",
+  "counterpart": "blend",
+  "colors": {
+    "canvas": "#161614",
+    "surface": "#1E1E1B",
+    "surfaceMuted": "#25241F",
+    "ink": "#F2F0E9",
+    "muted": "#B9B6AC",
+    "subtle": "#8A877E",
+    "accent": "#8FC9AD",
+    "accentStrong": "#A8DCC3",
+    "accentSoft": "#1F2B25",
+    "accentLine": "#2C3B33",
+    "warm": "#E09A87",
+    "warmSoft": "#2E211D",
+    "rule": "#2E2D28",
+    "selection": "#33483D",
+    "shadow": "rgba(0, 0, 0, 0.45)"
+  },
+  "fonts": {
+    "body": "\"Manrope\", ui-sans-serif, -apple-system, sans-serif",
+    "display": "\"Newsreader\", ui-serif, \"New York\", Georgia, serif",
+    "mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "layout": {
+    "measure": "42rem",
+    "radius": "14px",
+    "bodySize": "17px",
+    "lineHeight": 1.72,
+    "titleSize": "3.35rem"
+  },
+  "syntax": {
+    "comment": "#8F8B81",
+    "string": "#9BC7A9",
+    "number": "#E0B77E",
+    "keyword": "#E89A85",
+    "function": "#8FC9B3",
+    "typeName": "#D8CCB4",
+    "property": "#9DB8C7",
+    "tag": "#E89A85",
+    "attribute": "#D6B27A",
+    "punctuation": "#8A877E",
+    "operator": "#B9B6AC"
+  }
+}

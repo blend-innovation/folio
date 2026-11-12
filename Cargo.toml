@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = ["crates/folio-core", "crates/folio-cli", "src-tauri"]
+default-members = ["crates/folio-core", "crates/folio-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+authors = ["Folio contributors"]
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+# Benchmarks stay fast while still reflecting release-like code paths.
+[profile.bench]
+lto = "thin"
+codegen-units = 1

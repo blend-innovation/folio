@@ -1,0 +1,62 @@
+name: macOS
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup component add rustfmt clippy
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check and test
+        run: |
+          cargo fmt --check
+          cargo clippy -p folio-core -p folio-cli --all-targets -- -D warnings
+          cargo test -p folio-core -p folio-cli
+          cargo test -p folio-app --lib
+          pnpm typecheck
+
+      - name: Build universal app and DMG
+        run: |
+          pnpm build:ui
+          pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: folio-macos-universal
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: folio-macos-app
+          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/Folio.app
+          if-no-files-found: error

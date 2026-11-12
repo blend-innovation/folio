@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en" data-theme="blend" data-appearance="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Folio — a quiet reader for Markdown." />
+    <title>Folio</title>
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true" focusable="false">
+      <symbol id="i-panel" viewBox="0 0 20 20">
+        <rect x="2.5" y="3.5" width="15" height="13" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4" />
+        <path d="M7.5 3.8v12.4" stroke="currentColor" stroke-width="1.4" />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 20 20">
+        <circle cx="8.8" cy="8.8" r="5.3" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path d="m12.8 12.8 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-open" viewBox="0 0 20 20">
+        <path d="M3 6.2c0-.8.6-1.4 1.4-1.4h3l1.4 1.7h6.8c.8 0 1.4.6 1.4 1.4v6.9c0 .8-.6 1.4-1.4 1.4H4.4c-.8 0-1.4-.6-1.4-1.4V6.2Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="i-close" viewBox="0 0 20 20">
+        <path d="m5.5 5.5 9 9m0-9-9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-up" viewBox="0 0 20 20">
+        <path d="m5 12 5-4.5 5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="i-down" viewBox="0 0 20 20">
+        <path d="m5 8 5 4.5L15 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="i-chevron" viewBox="0 0 20 20">
+        <path d="m7 12 3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="i-doc" viewBox="0 0 20 20">
+        <path d="M5 3.2h6.2L15 7v9.8H5V3.2Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+        <path d="M11 3.4V7h3.6M7.3 10h5.4M7.3 12.6h4.2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-leaf" viewBox="0 0 22 26">
+        <path d="M3.6 3.6c0-.9.7-1.6 1.6-1.6h8l5.2 5.2v15.2c0 .9-.7 1.6-1.6 1.6H5.2c-.9 0-1.6-.7-1.6-1.6V3.6Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+        <path d="M13.2 2.4v5.2H18.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+        <path d="M7.2 13.2c2.6-.8 5.6-.1 7.4 1.7-1 2.4-4.5 3.2-6.6 1.9-.9-.6-1.1-2.7-.8-3.6Z" fill="currentColor" opacity=".82" />
+        <path d="M8 17.8c.5-2.2 2.5-4.4 5.3-5.4" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
+      </symbol>
+    </svg>
+
+    <div class="app" id="app" data-state="welcome">
+      <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
+
+      <aside class="rail" id="rail" aria-label="Contents">
+        <div class="rail-drag" data-tauri-drag-region></div>
+        <div class="brand">
+          <svg class="brand-mark" aria-hidden="true"><use href="#i-leaf" /></svg>
+          <span class="brand-name">Folio</span>
+          <span class="brand-dot" aria-hidden="true"></span>
+        </div>
+        <button class="rail-close" id="rail-close" aria-label="Hide contents">
+          <svg class="icon"><use href="#i-close" /></svg>
+        </button>
+
+        <nav class="outline-wrap" aria-label="Document contents">
+          <p class="eyebrow">Contents</p>
+          <ol class="outline" id="outline"></ol>
+          <p class="outline-empty" id="outline-empty">Headings will appear here.</p>
+        </nav>
+
+        <div class="rail-foot">
+          <button class="theme-trigger" id="theme-trigger" aria-haspopup="dialog" aria-expanded="false">
+            <span class="theme-swatch" id="theme-swatch" aria-hidden="true"></span>
+            <span class="theme-name" id="theme-name">Blend</span>
+            <svg class="chevron" aria-hidden="true"><use href="#i-chevron" /></svg>
+          </button>
+
+          <div class="theme-panel" id="theme-panel" role="dialog" aria-label="Theme" hidden>
+            <div class="theme-panel-head">
+              <p class="eyebrow">Theme</p>
+              <button class="mini-close" id="theme-close" aria-label="Close theme picker">
+                <svg class="icon"><use href="#i-close" /></svg>
+              </button>
+            </div>
+            <button class="theme-auto" id="theme-auto" role="switch" aria-checked="true">
+              <span>Match system</span>
+              <span class="switch" aria-hidden="true"></span>
+            </button>
+            <div class="theme-list" id="theme-list" role="radiogroup" aria-label="Themes"></div>
+            <p class="theme-note" id="theme-note" hidden></p>
+            <button class="theme-dir" id="theme-dir">Open themes folder</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="rail-scrim" id="rail-scrim" hidden></div>
+
+      <main class="stage">
+        <header class="topbar" id="topbar" data-tauri-drag-region>
+          <button class="icon-btn rail-toggle" id="rail-toggle" aria-label="Toggle contents" title="Contents (⌘B)">
+            <svg class="icon"><use href="#i-panel" /></svg>
+          </button>
+          <div class="doc-id" data-tauri-drag-region>
+            <span class="doc-name" id="doc-name">Folio</span>
+            <span class="doc-path" id="doc-path">A quiet reader for Markdown</span>
+          </div>
+          <div class="doc-stats" id="doc-stats"></div>
+          <div class="topbar-actions">
+            <button class="icon-btn" id="find-btn" aria-label="Find in document" title="Find (⌘F)">
+              <svg class="icon"><use href="#i-search" /></svg>
+            </button>
+            <button class="open-btn" id="open-btn" aria-label="Open a document" title="Open a document (⌘O)">
+              <svg class="icon"><use href="#i-open" /></svg>
+              <span>Open</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="scroll" id="scroll" tabindex="-1">
+          <div class="page">
+            <article class="doc" id="doc" aria-live="off"></article>
+
+            <section class="welcome" id="welcome">
+              <div class="welcome-inner">
+                <p class="eyebrow welcome-eyebrow"><span class="eyebrow-rule"></span>Folio</p>
+                <h1>A quiet reader<br />for Markdown.</h1>
+                <p class="welcome-lede">
+                  Open a file, or drop one anywhere. Folio watches it and re-renders as it
+                  changes, so the page stays as current as your notes.
+                </p>
+                <div class="welcome-actions">
+                  <button class="btn btn-primary" id="welcome-open">
+                    Open a document
+                    <kbd>⌘O</kbd>
+                  </button>
+                  <button class="btn btn-ghost" id="welcome-sample">View the sample</button>
+                </div>
+
+                <div class="recents" id="recents-wrap" hidden>
+                  <p class="eyebrow">Recent</p>
+                  <ul class="recent-list" id="recent-list"></ul>
+                </div>
+
+                <p class="welcome-hint">
+                  <kbd>⌘O</kbd> open<span>·</span><kbd>⌘B</kbd> contents<span>·</span><kbd>⌘F</kbd> find
+                </p>
+              </div>
+            </section>
+
+            <footer class="colophon" id="colophon" hidden>
+              <span id="colophon-theme">Set in Blend</span>
+              <span id="colophon-meta"></span>
+            </footer>
+          </div>
+        </div>
+
+        <div class="findbar" id="findbar" role="search" hidden>
+          <svg class="icon find-icon" aria-hidden="true"><use href="#i-search" /></svg>
+          <input id="find-input" type="search" placeholder="Find in document" autocomplete="off" spellcheck="false" aria-label="Find in document" />
+          <span class="find-count" id="find-count" aria-live="polite">0 / 0</span>
+          <button class="find-nav" id="find-prev" aria-label="Previous match" title="Previous (⇧⏎)">
+            <svg class="icon"><use href="#i-up" /></svg>
+          </button>
+          <button class="find-nav" id="find-next" aria-label="Next match" title="Next (⏎)">
+            <svg class="icon"><use href="#i-down" /></svg>
+          </button>
+          <button class="find-nav find-close" id="find-close" aria-label="Close find" title="Close (Esc)">
+            <svg class="icon"><use href="#i-close" /></svg>
+          </button>
+        </div>
+
+        <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+      </main>
+
+      <div class="drop-overlay" id="drop-overlay" hidden>
+        <div class="drop-card">
+          <svg class="drop-mark" aria-hidden="true"><use href="#i-leaf" /></svg>
+          <p>Drop to read</p>
+          <span>Markdown or plain text</span>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,49 @@
+{
+  "id": "editorial-dark",
+  "name": "Editorial Dark",
+  "description": "An evening edition: espresso paper and copper ink.",
+  "appearance": "dark",
+  "counterpart": "editorial",
+  "colors": {
+    "canvas": "#191613",
+    "surface": "#211D18",
+    "surfaceMuted": "#2A251E",
+    "ink": "#F0E9DC",
+    "muted": "#C0B6A5",
+    "subtle": "#928878",
+    "accent": "#E0A087",
+    "accentStrong": "#EDB8A2",
+    "accentSoft": "#2B211B",
+    "accentLine": "#3B2E25",
+    "warm": "#E5A88F",
+    "warmSoft": "#33241D",
+    "rule": "#332C24",
+    "selection": "#46372C",
+    "shadow": "rgba(0, 0, 0, 0.5)"
+  },
+  "fonts": {
+    "body": "\"Newsreader\", ui-serif, \"New York\", Georgia, serif",
+    "display": "\"Newsreader\", ui-serif, \"New York\", Georgia, serif",
+    "mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "layout": {
+    "measure": "40rem",
+    "radius": "3px",
+    "bodySize": "18.5px",
+    "lineHeight": 1.7,
+    "titleSize": "3.7rem"
+  },
+  "syntax": {
+    "comment": "#9C9284",
+    "string": "#A3BE97",
+    "number": "#E3BC85",
+    "keyword": "#E9A18A",
+    "function": "#AAC7A8",
+    "typeName": "#D8C6A5",
+    "property": "#A8BDBB",
+    "tag": "#E9A18A",
+    "attribute": "#D6B27A",
+    "punctuation": "#9B917F",
+    "operator": "#B8AE9D"
+  }
+}

@@ -1,0 +1,15 @@
+/target
+/ui/dist
+/node_modules
+/artifacts
+/.logs
+.DS_Store
+*.log
+
+# Tauri generated
+/src-tauri/gen
+/src-tauri/target
+bench/corpus/
+
+# Local build-check sysroot and pkg-config stubs
+.tools/

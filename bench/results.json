@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-11-12T12:55:52.240Z",
+  "host": "linux/x64",
+  "node": "v22.23.3",
+  "startupP50Ms": 7.3623205,
+  "startupP95Ms": 10.652648,
+  "results": [
+    {
+      "label": "8 KB",
+      "markdownBytes": 8374,
+      "htmlBytes": 22584,
+      "iterations": 30,
+      "ms": {
+        "min": 3.226657,
+        "p50": 8.8179145,
+        "p95": 10.269695,
+        "max": 10.286382,
+        "mean": 7.6992108
+      },
+      "throughputMbPerSec": 0.9056641142966328
+    },
+    {
+      "label": "100 KB",
+      "markdownBytes": 102834,
+      "htmlBytes": 275506,
+      "iterations": 20,
+      "ms": {
+        "min": 3.932755,
+        "p50": 4.1374455,
+        "p95": 4.389698,
+        "max": 4.795258,
+        "mean": 4.1758951
+      },
+      "throughputMbPerSec": 23.703066216417913
+    },
+    {
+      "label": "1 MB",
+      "markdownBytes": 1049014,
+      "htmlBytes": 2801464,
+      "iterations": 10,
+      "ms": {
+        "min": 22.781799,
+        "p50": 55.424313,
+        "p95": 59.672727,
+        "max": 59.672727,
+        "mean": 47.58809949999999
+      },
+      "throughputMbPerSec": 18.050159852240046
+    },
+    {
+      "label": "4 MB",
+      "markdownBytes": 4194646,
+      "htmlBytes": 11186344,
+      "iterations": 5,
+      "ms": {
+        "min": 84.65441,
+        "p50": 119.421897,
+        "p95": 165.838593,
+        "max": 165.838593,
+        "mean": 128.35651979999997
+      },
+      "throughputMbPerSec": 33.49742599228859
+    }
+  ]
+}

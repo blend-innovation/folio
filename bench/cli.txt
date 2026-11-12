@@ -1,0 +1,8 @@
+building folio-cli (release)…
+8 KB    md     8 KB · html    22 KB · p50    8.8 ms · p95   10.3 ms · 0.9 MB/s
+100 KB  md   100 KB · html   269 KB · p50    4.1 ms · p95    4.4 ms · 23.7 MB/s
+1 MB    md  1024 KB · html  2736 KB · p50   55.4 ms · p95   59.7 ms · 18.1 MB/s
+4 MB    md  4096 KB · html 10924 KB · p50  119.4 ms · p95  165.8 ms · 33.5 MB/s
+
+startup baseline p50 7.4 ms (process spawn + CLI)
+wrote bench/results.json

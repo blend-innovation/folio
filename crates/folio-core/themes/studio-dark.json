@@ -1,0 +1,49 @@
+{
+  "id": "studio-dark",
+  "name": "Studio Dark",
+  "description": "The same technical calm, on graphite.",
+  "appearance": "dark",
+  "counterpart": "studio",
+  "colors": {
+    "canvas": "#121614",
+    "surface": "#191E1B",
+    "surfaceMuted": "#1F2521",
+    "ink": "#E8EFEA",
+    "muted": "#AAB6AE",
+    "subtle": "#7E8C83",
+    "accent": "#6FBF95",
+    "accentStrong": "#8ED6AC",
+    "accentSoft": "#1B2A22",
+    "accentLine": "#28392F",
+    "warm": "#E0967E",
+    "warmSoft": "#2B211C",
+    "rule": "#262E29",
+    "selection": "#2E4538",
+    "shadow": "rgba(0, 0, 0, 0.5)"
+  },
+  "fonts": {
+    "body": "\"Manrope\", ui-sans-serif, -apple-system, sans-serif",
+    "display": "\"Manrope\", ui-sans-serif, -apple-system, sans-serif",
+    "mono": "ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "layout": {
+    "measure": "38rem",
+    "radius": "10px",
+    "bodySize": "15.5px",
+    "lineHeight": 1.64,
+    "titleSize": "2.7rem"
+  },
+  "syntax": {
+    "comment": "#8B968E",
+    "string": "#8DC9A5",
+    "number": "#DFB57C",
+    "keyword": "#E29882",
+    "function": "#7FC8A2",
+    "typeName": "#B9CFC1",
+    "property": "#9AB6C3",
+    "tag": "#E29882",
+    "attribute": "#D3B07C",
+    "punctuation": "#7E8B83",
+    "operator": "#A0AEA5"
+  }
+}
