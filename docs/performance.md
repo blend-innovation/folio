@@ -93,7 +93,7 @@ The outline for a 1,100-section document is built in about 10 ms.
 
 | Asset | Raw | Gzip |
 | --- | ---: | ---: |
-| `app.js` (minified ES module) | 28.3 KB | 9.4 KB |
+| `app.js` (minified ES module) | 28.3 KB | 9.7 KB |
 | `app.css` (minified, all themes) | 35.0 KB | 8.0 KB |
 | Manrope + Newsreader WOFF2 subsets | 504 KB | — |
 | UI total before app binary | ~0.6 MB | ~17 KB JS+CSS |

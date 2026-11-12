@@ -218,7 +218,7 @@ The UI bundle is intentionally small:
 
 | Asset | Minified | Gzip |
 | --- | ---: | ---: |
-| JavaScript | 28 KB | 9.4 KB |
+| JavaScript | 28 KB | 9.7 KB |
 | CSS | 35 KB | 8.0 KB |
 | Fonts (local WOFF2, Latin + Latin-ext) | ~500 KB | — |
 

@@ -981,8 +981,10 @@ function toggleRail(): void {
     const open = !app.classList.contains("rail-open");
     app.classList.toggle("rail-open", open);
     railScrim.hidden = !open;
+    if (open) requestAnimationFrame(() => outline.measure());
   } else {
     app.classList.toggle("is-rail-hidden");
+    requestAnimationFrame(() => outline.measure());
   }
 }
 
@@ -993,6 +995,7 @@ function ensureRailVisible(): void {
   } else {
     app.classList.remove("is-rail-hidden");
   }
+  requestAnimationFrame(() => outline.measure());
 }
 
 const actionGuard = new Map<string, number>();

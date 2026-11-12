@@ -176,7 +176,10 @@ Opening a sample stops the watcher.
   `(18, 22)`. The rail reserves the top 50 px for the lights and drag region.
 - The top bar is a translucent cream surface with a blur fallback; a hairline
   appears only after the document scrolls.
-- Window geometry is persisted by `tauri-plugin-window-state`.
+- Window geometry is persisted by `tauri-plugin-window-state`; visibility is
+  not, so the first render always controls when the window appears.
+- On macOS, closing the window hides it. Clicking the Dock icon or choosing a
+  menu action brings it back; quit from the app menu.
 - The window is created hidden and revealed by `show_window` after the first
   render. A 1.4 s fallback shows it even if the frontend fails to boot.
 - On narrow windows the rail becomes a drawer with a scrim; on wide windows it

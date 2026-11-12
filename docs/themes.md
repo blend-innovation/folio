@@ -37,7 +37,6 @@ Then open the file and change the tokens. Restart the app.
   "name": "Quiet Paper",
   "description": "Warm paper and a softer accent for late reading.",
   "appearance": "light",
-  "counterpart": "quiet-paper-dark",
   "colors": {
     "canvas": "#FAF7F0",
     "surface": "#FFFFFF",
@@ -83,7 +82,9 @@ Then open the file and change the tokens. Restart the app.
 }
 ```
 
-The example above is close to Blend with a warmer page. Every built-in theme
+The example above is close to Blend with a warmer page. A theme may define a
+`counterpart` id if it has a paired dark or light version; see
+[Automatic appearance](#automatic-appearance). Every built-in theme
 follows the same schema; `crates/folio-core/themes/blend.json` is the canonical
 default.
 

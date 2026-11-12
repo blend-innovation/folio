@@ -145,7 +145,7 @@ export class FindController {
     );
     if (this.marks.length > 0) {
       this.current = 0;
-      this.applyCurrent(false);
+      this.applyCurrent(true);
     } else {
       this.current = -1;
     }
