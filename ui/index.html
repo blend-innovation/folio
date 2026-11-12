@@ -177,6 +177,22 @@
           <span>Markdown or plain text</span>
         </div>
       </div>
+
+      <div class="default-prompt" id="default-prompt" hidden>
+        <div class="default-card" role="dialog" aria-modal="true" aria-labelledby="default-title" aria-describedby="default-body">
+          <p class="eyebrow">One small thing</p>
+          <h2 id="default-title">Make Folio the default Markdown app?</h2>
+          <p id="default-body">
+            Double-clicking a <code>.md</code> file will open it here, in Folio's
+            reading view. You can change this anytime in Finder → Get Info.
+          </p>
+          <div class="default-actions">
+            <button class="btn btn-primary" id="default-yes" type="button">Yes, make it default</button>
+            <button class="btn btn-ghost" id="default-no" type="button" title="Ask again next time">No</button>
+          </div>
+          <button class="default-never" id="default-never" type="button">Never show again</button>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="app.js"></script>

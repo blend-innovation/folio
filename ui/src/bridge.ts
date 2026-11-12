@@ -52,6 +52,10 @@ export async function invoke<T>(
     case "show_window":
     case "set_title":
       return undefined as unknown as T;
+    case "markdown_default_status":
+      return { available: false, isDefault: false } as unknown as T;
+    case "set_markdown_default":
+      throw new Error("Setting the default app is only available in the native app.");
     default:
       throw new Error(`Unknown preview command: ${command}`);
   }

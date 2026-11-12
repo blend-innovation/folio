@@ -74,6 +74,11 @@ has no border; after scrolling, a hairline appears. It carries the filename and
 path, word count and reading time, find, and open. A 2 px sage progress line
 runs along the very top of the stage.
 
+On the first Markdown open, a small centered card may ask whether to make Folio
+the default reader. It is the same room: surface, hairline, display heading,
+one confident primary action, a quiet No, and a deliberately low-key “Never
+show again” beneath a rule.
+
 The find bar is a small floating card at the bottom. Matches use a warm
 highlight; the current match uses the strong accent. It does not replace the
 page or cover the reading column for long.

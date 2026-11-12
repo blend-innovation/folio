@@ -110,3 +110,8 @@ export interface Bootstrap {
 export interface MenuEvent {
   action: string;
 }
+
+export interface DefaultAppStatus {
+  available: boolean;
+  isDefault: boolean;
+}

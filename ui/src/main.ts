@@ -12,6 +12,7 @@ performance.mark("folio:module-start");
 
 import type {
   Bootstrap,
+  DefaultAppStatus,
   DocumentPayload,
   MenuEvent,
   RecentFile,
@@ -67,6 +68,10 @@ const findCount = $<HTMLElement>("find-count");
 const findPrevious = $<HTMLButtonElement>("find-prev");
 const findNext = $<HTMLButtonElement>("find-next");
 const findClose = $<HTMLButtonElement>("find-close");
+const defaultPrompt = $<HTMLElement>("default-prompt");
+const defaultYes = $<HTMLButtonElement>("default-yes");
+const defaultNo = $<HTMLButtonElement>("default-no");
+const defaultNever = $<HTMLButtonElement>("default-never");
 
 /* --------------------------------------------------------------------------
    State
@@ -195,6 +200,14 @@ function installEventListeners(): void {
   themeAuto.addEventListener("click", toggleAutoTheme);
   themeDir.addEventListener("click", revealThemes);
 
+  defaultYes.addEventListener("click", () => void answerDefaultPrompt("yes"));
+  defaultNo.addEventListener("click", () => void answerDefaultPrompt("no"));
+  defaultNever.addEventListener("click", () => void answerDefaultPrompt("never"));
+  defaultPrompt.addEventListener("click", (event) => {
+    if (event.target === defaultPrompt) void answerDefaultPrompt("no");
+  });
+  defaultPrompt.addEventListener("keydown", handleDefaultPromptKeys);
+
   docElement.addEventListener("click", handleDocumentClick);
 
   scrollElement.addEventListener("scroll", onScroll, { passive: true });
@@ -265,6 +278,10 @@ function installEventListeners(): void {
 let resizeTimer: number | undefined;
 let bootMeasured = false;
 let codeObserver: IntersectionObserver | null = null;
+let defaultPromptChecked = false;
+let defaultPromptShown = false;
+let defaultPromptTimer: number | undefined;
+let defaultPromptPreviousFocus: HTMLElement | null = null;
 
 /* --------------------------------------------------------------------------
    Theme
@@ -592,6 +609,7 @@ function renderDocument(
 
   const title = payload.meta.title || prettyName(payload.name) || "Untitled";
   document.title = `${title} · Folio`;
+  maybeOfferDefaultApp(payload);
   if (!bootMeasured) {
     bootMeasured = true;
     try {
@@ -608,11 +626,129 @@ function renderDocument(
   invoke("set_title", { title: document.title }).catch(() => {});
 }
 
+/* --------------------------------------------------------------------------
+   Default Markdown app
+   -------------------------------------------------------------------------- */
+
+function isMarkdownPath(path: string): boolean {
+  const extension = path.split(".").pop()?.toLowerCase() ?? "";
+  return extension === "md" || extension === "markdown";
+}
+
+function defaultAppPreference(): string | null {
+  try {
+    return localStorage.getItem("folio.defaultApp");
+  } catch {
+    return null;
+  }
+}
+
+function maybeOfferDefaultApp(payload: DocumentPayload): void {
+  if (payload.sample || state.boot?.platform !== "macos") return;
+  if (!isMarkdownPath(payload.path)) return;
+  if (defaultPromptChecked || defaultPromptShown) return;
+  if (defaultAppPreference()) return;
+
+  defaultPromptChecked = true;
+  window.clearTimeout(defaultPromptTimer);
+  defaultPromptTimer = window.setTimeout(async () => {
+    if (defaultPromptShown) return;
+    try {
+      const status = await invoke<DefaultAppStatus>("markdown_default_status");
+      if (!status.available || status.isDefault) return;
+      if (defaultAppPreference() || defaultPromptShown) return;
+      showDefaultPrompt();
+    } catch {
+      // If LaunchServices cannot be queried, stay quiet rather than nag.
+    }
+  }, 700);
+}
+
+function showDefaultPrompt(): void {
+  if (defaultPromptShown || !defaultPrompt.hidden) return;
+  defaultPromptShown = true;
+  defaultPromptPreviousFocus =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  defaultPrompt.hidden = false;
+  app.classList.add("prompt-open");
+  requestAnimationFrame(() => defaultYes.focus({ preventScroll: true }));
+}
+
+function closeDefaultPrompt(): void {
+  defaultPrompt.hidden = true;
+  app.classList.remove("prompt-open");
+  defaultYes.disabled = false;
+  defaultNo.disabled = false;
+  defaultNever.disabled = false;
+  const previous = defaultPromptPreviousFocus;
+  defaultPromptPreviousFocus = null;
+  if (previous?.isConnected) previous.focus({ preventScroll: true });
+  else scrollElement.focus({ preventScroll: true });
+}
+
+async function answerDefaultPrompt(choice: "yes" | "no" | "never"): Promise<void> {
+  if (defaultPrompt.hidden) return;
+  if (choice === "no") {
+    closeDefaultPrompt();
+    return;
+  }
+  if (choice === "never") {
+    try {
+      localStorage.setItem("folio.defaultApp", "never");
+    } catch {
+      // ignore storage failures
+    }
+    closeDefaultPrompt();
+    return;
+  }
+
+  defaultYes.disabled = true;
+  defaultNo.disabled = true;
+  defaultNever.disabled = true;
+  try {
+    await invoke("set_markdown_default");
+    try {
+      localStorage.setItem("folio.defaultApp", "set");
+    } catch {
+      // ignore storage failures
+    }
+    closeDefaultPrompt();
+    showToast("Folio is now the default app for Markdown.");
+  } catch (error) {
+    closeDefaultPrompt();
+    showToast(errorText(error));
+  }
+}
+
+function handleDefaultPromptKeys(event: KeyboardEvent): void {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    void answerDefaultPrompt("no");
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = [defaultYes, defaultNo, defaultNever].filter(
+    (button) => !button.disabled,
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function showWelcome(): void {
   state.document = null;
   app.dataset.state = "welcome";
   codeObserver?.disconnect();
   codeObserver = null;
+  closeDefaultPrompt();
   docElement.innerHTML = "";
   docElement.hidden = true;
   welcome.hidden = false;
@@ -1070,6 +1206,7 @@ function setTextScale(scale: number): void {
 }
 
 function handleKeyboard(event: KeyboardEvent): void {
+  if (!defaultPrompt.hidden) return;
   if (event.key === "Escape") {
     if (!themePanel.hidden) {
       setThemePanel(false);
@@ -1209,6 +1346,7 @@ if (!hasTauri()) {
         scale: (value: number) => void;
         find: () => void;
         menu: (action: string) => void;
+        defaultPrompt: () => void;
       };
     }
   ).__folio = {
@@ -1225,6 +1363,7 @@ if (!hasTauri()) {
     scale: setTextScale,
     find: () => runAction("find"),
     menu: runAction,
+    defaultPrompt: showDefaultPrompt,
   };
 }
 

@@ -50,6 +50,13 @@ pub struct DocumentPayload {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DefaultAppStatus {
+    pub available: bool,
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Bootstrap {
     pub themes: ThemeCatalog,
     pub recents: Vec<RecentFile>,
@@ -224,6 +231,40 @@ fn reveal_themes(app: AppHandle) -> Result<(), String> {
     app.opener()
         .open_path(dir.to_string_lossy(), None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+/// Whether `.md` / `.markdown` currently resolve to this app. `available` is
+/// false outside a macOS app bundle (for example `cargo run`), so the UI never
+/// offers a default-app change from a development binary.
+#[tauri::command]
+fn markdown_default_status(app: AppHandle) -> DefaultAppStatus {
+    #[cfg(target_os = "macos")]
+    {
+        macos_default::status(&app.config().identifier)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        DefaultAppStatus {
+            available: false,
+            is_default: false,
+        }
+    }
+}
+
+/// Ask LaunchServices to make Folio the handler for `.md` and, best effort,
+/// `.markdown`. Only meaningful from the bundled app.
+#[tauri::command]
+fn set_markdown_default(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos_default::set(&app.config().identifier)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("Setting the default Markdown app is only available on macOS.".into())
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -721,7 +762,9 @@ pub fn run() {
             read_image,
             open_external,
             open_path,
-            reveal_themes
+            reveal_themes,
+            markdown_default_status,
+            set_markdown_default
         ]);
 
     builder
@@ -743,6 +786,177 @@ pub fn run() {
                 let _ = (app, event);
             }
         });
+}
+
+/* --------------------------------------------------------------------------
+LaunchServices: default Markdown app
+-------------------------------------------------------------------------- */
+
+#[cfg(target_os = "macos")]
+mod macos_default {
+    use super::DefaultAppStatus;
+    use std::ffi::{c_char, c_void, CString};
+
+    type CFStringRef = *const c_void;
+    type CFAllocatorRef = *const c_void;
+    type CFIndex = isize;
+    type Boolean = u8;
+
+    const UTF8: u32 = 0x0800_0100;
+    // kLSRolesAll
+    const ROLE_ALL: u32 = 0xFFFF_FFFF;
+    const PRIMARY_EXTENSION: &str = "md";
+    const SECONDARY_EXTENSION: &str = "markdown";
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    #[link(name = "CoreServices", kind = "framework")]
+    #[link(name = "UniformTypeIdentifiers", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithCString(
+            alloc: CFAllocatorRef,
+            c_str: *const c_char,
+            encoding: u32,
+        ) -> CFStringRef;
+        fn CFStringGetCString(
+            the_string: CFStringRef,
+            buffer: *mut c_char,
+            buffer_size: CFIndex,
+            encoding: u32,
+        ) -> Boolean;
+        fn CFStringGetLength(the_string: CFStringRef) -> CFIndex;
+        fn CFRelease(cf: *const c_void);
+
+        fn UTTypeCreatePreferredIdentifierForTag(
+            tag_class: CFStringRef,
+            tag: CFStringRef,
+            conforming_to: CFStringRef,
+        ) -> CFStringRef;
+
+        fn LSSetDefaultRoleHandlerForContentType(
+            content_type: CFStringRef,
+            role_mask: u32,
+            handler: CFStringRef,
+        ) -> i32;
+        fn LSCopyDefaultRoleHandlerForContentType(
+            content_type: CFStringRef,
+            role_mask: u32,
+        ) -> CFStringRef;
+    }
+
+    fn is_app_bundle() -> bool {
+        std::env::current_exe()
+            .map(|path| path.to_string_lossy().contains(".app/Contents/MacOS/"))
+            .unwrap_or(false)
+    }
+
+    fn cf_string(value: &str) -> CFStringRef {
+        let Ok(c_string) = CString::new(value) else {
+            return std::ptr::null();
+        };
+        unsafe { CFStringCreateWithCString(std::ptr::null(), c_string.as_ptr(), UTF8) }
+    }
+
+    fn cf_release(value: CFStringRef) {
+        if !value.is_null() {
+            unsafe { CFRelease(value) };
+        }
+    }
+
+    fn cf_to_string(value: CFStringRef) -> Option<String> {
+        if value.is_null() {
+            return None;
+        }
+        let length = unsafe { CFStringGetLength(value) };
+        if length <= 0 {
+            return None;
+        }
+        let size = length.saturating_mul(4).saturating_add(1);
+        let mut buffer = vec![0u8; size as usize];
+        let ok =
+            unsafe { CFStringGetCString(value, buffer.as_mut_ptr() as *mut c_char, size, UTF8) };
+        if ok == 0 {
+            return None;
+        }
+        let end = buffer
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(buffer.len());
+        String::from_utf8(buffer[..end].to_vec()).ok()
+    }
+
+    fn uti_for_extension(extension: &str) -> CFStringRef {
+        let class = cf_string("public.filename-extension");
+        let tag = cf_string(extension);
+        if class.is_null() || tag.is_null() {
+            cf_release(class);
+            cf_release(tag);
+            return std::ptr::null();
+        }
+        let uti = unsafe { UTTypeCreatePreferredIdentifierForTag(class, tag, std::ptr::null()) };
+        cf_release(class);
+        cf_release(tag);
+        uti
+    }
+
+    fn is_default_for(extension: &str, bundle_id: &str) -> Option<bool> {
+        let uti = uti_for_extension(extension);
+        if uti.is_null() {
+            return None;
+        }
+        let current = unsafe { LSCopyDefaultRoleHandlerForContentType(uti, ROLE_ALL) };
+        cf_release(uti);
+        if current.is_null() {
+            return Some(false);
+        }
+        let matches = cf_to_string(current).as_deref() == Some(bundle_id);
+        cf_release(current);
+        Some(matches)
+    }
+
+    fn set_for(extension: &str, handler: CFStringRef) -> Result<(), String> {
+        let uti = uti_for_extension(extension);
+        if uti.is_null() {
+            return Err(format!("Could not resolve the type for .{extension}."));
+        }
+        let status = unsafe { LSSetDefaultRoleHandlerForContentType(uti, ROLE_ALL, handler) };
+        cf_release(uti);
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(format!(
+                "LaunchServices returned {status} while setting .{extension}."
+            ))
+        }
+    }
+
+    pub fn status(bundle_id: &str) -> DefaultAppStatus {
+        if bundle_id.is_empty() || !is_app_bundle() {
+            return DefaultAppStatus {
+                available: false,
+                is_default: false,
+            };
+        }
+        let is_default = is_default_for(PRIMARY_EXTENSION, bundle_id).unwrap_or(false);
+        DefaultAppStatus {
+            available: true,
+            is_default,
+        }
+    }
+
+    pub fn set(bundle_id: &str) -> Result<(), String> {
+        if bundle_id.is_empty() || !is_app_bundle() {
+            return Err("Open the built Folio.app to set it as the default.".into());
+        }
+        let handler = cf_string(bundle_id);
+        if handler.is_null() {
+            return Err("Could not read the Folio bundle identifier.".into());
+        }
+        // `.md` is the promise; `.markdown` is a courtesy.
+        let primary = set_for(PRIMARY_EXTENSION, handler);
+        let _ = set_for(SECONDARY_EXTENSION, handler);
+        cf_release(handler);
+        primary
+    }
 }
 
 #[cfg(test)]

@@ -245,6 +245,33 @@ await test("code blocks can be copied", async () => {
   assert.match(clipboard, /pub struct Document|fn main/);
 });
 
+await test("the default-app prompt offers Yes, No, and Never", async () => {
+  await openSample();
+  await page.evaluate(() => window.__folio.defaultPrompt());
+  await page.waitForSelector("#default-prompt:not([hidden])");
+  assert.equal(
+    await page.$$eval("#default-prompt button", (nodes) => nodes.length),
+    3,
+  );
+  assert.equal(await page.evaluate(() => document.activeElement.id), "default-yes");
+  await page.keyboard.press("Escape");
+  assert.equal(await page.$eval("#default-prompt", (node) => node.hidden), true);
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("folio.defaultApp")),
+    null,
+  );
+
+  await openSample();
+  await page.evaluate(() => window.__folio.defaultPrompt());
+  await page.waitForSelector("#default-prompt:not([hidden])");
+  await page.click("#default-never");
+  assert.equal(await page.$eval("#default-prompt", (node) => node.hidden), true);
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("folio.defaultApp")),
+    "never",
+  );
+});
+
 await test("text size is adjustable and resets", async () => {
   await openSample();
   const before = await page.$eval(".doc", (node) =>
@@ -344,6 +371,10 @@ await test("welcome, documents, and the theme picker pass axe", async () => {
 
   await openSample();
   const blendViolations = await a11y("blend");
+  await page.evaluate(() => window.__folio.defaultPrompt());
+  await page.waitForSelector("#default-prompt:not([hidden])");
+  const promptViolations = await a11y("default prompt");
+  await page.click("#default-no");
   await page.evaluate(() => document.getElementById("theme-trigger").click());
   const panelViolations = await a11y("theme panel");
   await page.evaluate(() => document.getElementById("theme-close").click());
@@ -356,7 +387,11 @@ await test("welcome, documents, and the theme picker pass axe", async () => {
     await a11y(theme);
   }
 
-  const total = welcomeViolations.length + blendViolations.length + panelViolations.length;
+  const total =
+    welcomeViolations.length +
+    blendViolations.length +
+    promptViolations.length +
+    panelViolations.length;
   console.log(`    axe violations on core surfaces: ${total}`);
 });
 

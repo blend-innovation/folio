@@ -25,6 +25,12 @@ await screenshot(page, "welcome-blend.png");
 // Blend: title, code, table
 await load();
 await screenshot(page, "doc-blend-top.png");
+await page.evaluate(() => window.__folio.defaultPrompt());
+await page.evaluate(
+  () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+);
+await screenshot(page, "default-prompt.png");
+await page.click("#default-no");
 await scrollToHeading(page, "Code is part of the prose");
 await screenshot(page, "doc-blend-code.png");
 await scrollToHeading(page, "Tables, when they earn their place");

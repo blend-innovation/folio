@@ -119,7 +119,7 @@ See `crates/folio-core/tests/render.rs` for the XSS regression suite.
 
 ## IPC contract
 
-The webview talks to the shell through ten commands and a handful of events.
+The webview talks to the shell through twelve commands and a handful of events.
 
 | Command | Result |
 | --- | --- |
@@ -131,6 +131,8 @@ The webview talks to the shell through ten commands and a handful of events.
 | `open_external { url }` | Hands an allowed URL to the OS. |
 | `open_path { path }` | Opens a local file in its default app. |
 | `reveal_themes` | Opens the user theme folder. |
+| `markdown_default_status` | Whether the bundled app is currently the `.md` handler. |
+| `set_markdown_default` | Makes Folio the LaunchServices handler for `.md` / `.markdown`. |
 | `set_title { title }` | Updates the native window title. |
 | `show_window` | Reveals the window after the first paint. |
 
@@ -143,6 +145,23 @@ The webview talks to the shell through ten commands and a handful of events.
 | `tauri://drag-enter` / `drag-leave` / `drag-drop` | Tauri → UI | Drag state and dropped paths. |
 
 All payloads are serde `camelCase` structs mirrored by `ui/src/types.ts`.
+
+### Default Markdown app
+
+On the first real Markdown file in a session, the UI asks whether Folio should
+become the default `.md` reader. The shell resolves the LaunchServices UTI for
+the extension, compares its role handler to the bundle identifier, and offers a
+theme-aware three-button prompt only when the app is running from a real `.app`
+bundle and is not already the handler.
+
+- **Yes** calls `LSSetDefaultRoleHandlerForContentType` for `.md` and makes a
+  best-effort attempt for `.markdown`; the decision is remembered.
+- **No** dismisses the prompt for this session; it may return next launch.
+- **Never show again** is stored in the webview's `localStorage` and suppresses
+  later offers.
+
+No prompt appears for `.txt`, the built-in sample, or a `cargo run` development
+binary. Users can always change the association in Finder → Get Info.
 
 ### Document payload
 
@@ -221,6 +240,6 @@ usable without the app.
 | `folio-core` unit tests | escaping, slugs, frontmatter, path classification, theme validation, highlighter families |
 | `folio-core` integration | headings, callouts, tables, tasks, figures, footnotes, links, raw HTML, XSS, stats, Unicode, CRLF |
 | `folio-cli` integration | stdout, JSON, `--out`, stdin, errors, theme listing/scaffolding |
-| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, find, clipboard, text size, responsive rail, axe, large-document timing |
+| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, find, clipboard, text size, default-app prompt, responsive rail, axe, large-document timing |
 | criterion | render and highlight throughput across 8 KB/100 KB/1 MB plus no-highlight |
 | `bench/run.mjs` | release CLI wall clock and HTML growth, including process startup |

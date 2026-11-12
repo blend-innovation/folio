@@ -29,6 +29,8 @@ and gives it a page.
   match the system appearance with a paired theme.
 - **Live reload.** Folio watches the document and re-renders when it changes,
   keeping your place on the page.
+- **A gentle default-app offer.** On the first Markdown open, Folio can offer
+  to become your default `.md` app — Yes, No, or Never show again.
 - **A real reading interface.** Sticky contents rail with scroll spy, reading
   progress, find, adjustable text size, code copy, collapsible long snippets,
   and a native menu.
@@ -40,7 +42,7 @@ and gives it a page.
 - **Safe by construction.** Raw HTML is shown as text, never executed. URLs
   are classified and sanitised. Theme values are validated before they become
   CSS.
-- **Small.** The UI ships as roughly 30 KB of JavaScript and 35 KB of CSS
+- **Small.** The UI ships as roughly 31 KB of JavaScript and 36 KB of CSS
   (minified, before gzip); fonts are local. The native shell is a single Rust binary using
   the system WebView, not a bundled browser. The release shell binary measured
   7.5 MB on the Linux validation build; the macOS bundle adds roughly 0.6 MB of
@@ -111,6 +113,10 @@ cargo run -p folio-cli -- themes scaffold my-theme
 Open a file with **⌘O**, drag one onto the window, double-click a Markdown file
 associated with Folio, or choose **View the sample** from the welcome page.
 Folio watches the file from then on. Save in your editor and the page updates.
+On the first Markdown file of a session, Folio may ask whether to become the
+default `.md` app. **Yes** registers it with LaunchServices; **No** asks again
+next launch; **Never show again** is remembered. The prompt never appears for
+the built-in sample or in a development build that is not inside an `.app`.
 
 | Shortcut | Action |
 | --- | --- |
@@ -218,8 +224,8 @@ The UI bundle is intentionally small:
 
 | Asset | Minified | Gzip |
 | --- | ---: | ---: |
-| JavaScript | 28 KB | 9.7 KB |
-| CSS | 35 KB | 8.0 KB |
+| JavaScript | 31 KB | 10.3 KB |
+| CSS | 36 KB | 8.2 KB |
 | Fonts (local WOFF2, Latin + Latin-ext) | ~500 KB | — |
 
 The macOS app does not bundle a browser engine; it uses the WebView already on
