@@ -61,6 +61,9 @@ The brand sits below the traffic lights. The contents list is
 - clamped to two lines so a long heading does not truncate into an ellipsis,
 - marked with a sage left edge and a soft gradient for the active section.
 
+The list is its own scroller: a long outline scrolls between the fixed brand and
+the fixed theme control, with overscroll contained so the page does not move.
+
 The theme control is pinned to the bottom. It shows a colour swatch and the
 theme name; the popover lists all six themes with three-colour swatches and a
 “Match system” switch. Automatic mode follows the selected theme's

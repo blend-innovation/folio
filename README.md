@@ -195,6 +195,15 @@ The full token reference and a worked example are in
 [docs/themes.md](docs/themes.md). Themes cannot add arbitrary CSS; they can only
 change the tokens.
 
+## Extending Folio
+
+Folio does not ship a plugin runtime. Extensions start with themes and are
+meant to stay declarative: validated JSON, no executable code, no startup cost.
+If code extensions are ever needed, the preferred path is an opt-in external
+subprocess plugin host rather than JavaScript in the WebView or a linked WASM
+runtime. The options, hooks, security boundaries, and non-goals are recorded in
+[docs/plugins.md](docs/plugins.md).
+
 ## Performance
 
 Folio's hot path is entirely in Rust: parse Markdown once, highlight code once,
@@ -287,7 +296,7 @@ crates/folio-core/     Markdown renderer, highlighter, paths, themes (Rust)
 crates/folio-cli/      `folio` command-line renderer
 src-tauri/             macOS shell: window, menu, watcher, IPC
 ui/                    Vanilla TypeScript UI and the document stylesheet
-docs/                  Design, theme, performance, and architecture notes
+docs/                  Design, theme, plugin, performance, and architecture notes
 tests/e2e/             Chrome end-to-end, accessibility, and screenshot suite
 bench/                 CLI benchmark harness and corpora
 ```

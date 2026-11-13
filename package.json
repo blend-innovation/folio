@@ -16,7 +16,6 @@
     "test": "pnpm typecheck && pnpm test:e2e",
     "test:e2e": "node tests/e2e/run.mjs",
     "screenshots": "node tests/e2e/screenshots.mjs",
-    "bench:ui": "node tests/e2e/bench.mjs",
     "bench": "cargo bench -p folio-core --bench render 2>&1 | tee bench/criterion.txt",
     "bench:cli": "node bench/run.mjs",
     "bench:ui": "node tests/e2e/bench.mjs",

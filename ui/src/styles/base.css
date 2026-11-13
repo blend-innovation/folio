@@ -226,6 +226,7 @@ kbd {
   z-index: 20;
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   padding: 50px 13px 14px;
   border-right: 1px solid var(--f-rule);
@@ -238,11 +239,13 @@ kbd {
   right: 0;
   left: 0;
   height: 46px;
-  -webkit-app-region: drag;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .brand {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 9px;
   padding: 2px 11px 22px;
@@ -295,6 +298,7 @@ kbd {
   flex: 1;
   flex-direction: column;
   gap: 11px;
+  overflow: hidden;
   padding-top: 17px;
   border-top: 1px solid var(--f-rule);
 }
@@ -305,6 +309,7 @@ kbd {
   margin: 0;
   padding: 0 4px 0 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
   scrollbar-width: thin;
   scrollbar-color: var(--f-accent-line) transparent;
@@ -380,6 +385,7 @@ kbd {
 
 .rail-foot {
   position: relative;
+  flex: none;
   padding-top: 12px;
   border-top: 1px solid var(--f-rule);
 }
@@ -672,7 +678,8 @@ kbd {
   padding: 0 16px 0 14px;
   border-bottom: 1px solid transparent;
   transition: border-color 0.25s ease;
-  -webkit-app-region: drag;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .topbar::before {
@@ -692,10 +699,6 @@ kbd {
 
 .app.is-scrolled .topbar {
   border-bottom-color: var(--f-rule);
-}
-
-.topbar button {
-  -webkit-app-region: no-drag;
 }
 
 .rail-toggle {
@@ -905,7 +908,7 @@ kbd {
   width: 100%;
   max-width: calc(var(--f-measure) + 128px);
   margin: 0 auto;
-  padding: calc(var(--topbar-height) + 38px) 64px 140px;
+  padding: calc(var(--topbar-height) + 38px) 64px 200px;
 }
 
 .doc {
@@ -1349,7 +1352,7 @@ mark.find-hit.is-current {
 
 @media (max-width: 720px) {
   .page {
-    padding: calc(var(--topbar-height) + 26px) 24px 110px;
+    padding: calc(var(--topbar-height) + 26px) 24px 140px;
   }
 
   .doc-path {

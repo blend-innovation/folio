@@ -124,6 +124,10 @@ await test("a document becomes a designed page", async () => {
   );
   assert.equal(await page.$$eval("#outline a", (nodes) => nodes.length), 8);
   assert.equal(await page.$eval("#find-btn", (node) => node.disabled), false);
+  assert.equal(
+    await page.$eval(".page", (node) => getComputedStyle(node).paddingBottom),
+    "200px",
+  );
   const boot = await page.evaluate(() => {
     const entry = performance.getEntriesByName("folio:boot")[0];
     return entry ? entry.duration : null;
@@ -299,6 +303,10 @@ await test("the rail becomes a drawer on a narrow window", async () => {
   await reset();
   await page.setViewport({ width: 430, height: 900, deviceScaleFactor: 2 });
   await openApp(page, server.url);
+  assert.equal(
+    await page.$eval(".page", (node) => getComputedStyle(node).paddingBottom),
+    "140px",
+  );
   assert.equal(await page.evaluate(() => document.getElementById("app").classList.contains("rail-open")), false);
   await page.click("#rail-toggle");
   assert.equal(await page.evaluate(() => document.getElementById("app").classList.contains("rail-open")), true);
@@ -361,6 +369,50 @@ await test("a 700 KB document renders quickly in the webview", async () => {
     `large document paint took ${duration.toFixed(1)} ms`,
   );
   assert.ok((await page.$$eval(".code-block", (nodes) => nodes.length)) >= 1000);
+});
+
+await test("a long outline scrolls inside the rail", async () => {
+  await reset();
+  await openApp(page, server.url);
+  const medium = JSON.parse(
+    await readFile(join(ROOT, "ui/dist/fixtures/medium.json"), "utf8"),
+  );
+  await page.evaluate((payload) => window.__folio.render(payload), medium);
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
+
+  const before = await page.evaluate(() => {
+    const outline = document.getElementById("outline");
+    return {
+      count: outline.querySelectorAll("a").length,
+      scrollHeight: outline.scrollHeight,
+      clientHeight: outline.clientHeight,
+      scrollTop: outline.scrollTop,
+      railHeight: document.getElementById("rail").clientHeight,
+      viewportHeight: window.innerHeight,
+      footTop: document.querySelector(".rail-foot").getBoundingClientRect().top,
+    };
+  });
+  assert.ok(before.count > 100, `expected many headings, got ${before.count}`);
+  assert.ok(
+    before.scrollHeight > before.clientHeight + 200,
+    `outline is not scrollable: ${before.scrollHeight} / ${before.clientHeight}`,
+  );
+  assert.ok(
+    before.railHeight <= before.viewportHeight,
+    `rail grew past the window: ${before.railHeight} > ${before.viewportHeight}`,
+  );
+
+  const after = await page.$eval("#outline", (node) => {
+    node.scrollTop = 320;
+    return {
+      scrollTop: node.scrollTop,
+      footTop: document.querySelector(".rail-foot").getBoundingClientRect().top,
+    };
+  });
+  assert.ok(after.scrollTop > 0, "outline scrollTop did not change");
+  assert.equal(after.footTop, before.footTop, "the theme footer moved with the outline");
 });
 
 await test("welcome, documents, and the theme picker pass axe", async () => {

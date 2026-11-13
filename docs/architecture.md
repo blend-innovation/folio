@@ -193,6 +193,11 @@ Opening a sample stops the watcher.
 
 - macOS title bar is `Overlay` with a hidden title and traffic lights at
   `(18, 22)`. The rail reserves the top 50 px for the lights and drag region.
+- Dragging uses Tauri drag regions: the top bar, filename block, and rail strip
+  carry `data-tauri-drag-region="deep"`, and the capability grants
+  `core:window:allow-start-dragging`. A small fallback calls `startDragging()`
+  when the built-in handler does not consume the press; buttons and links keep
+  their own clicks.
 - The top bar is a translucent cream surface with a blur fallback; a hairline
   appears only after the document scrolls.
 - Window geometry is persisted by `tauri-plugin-window-state`; visibility is
@@ -232,6 +237,16 @@ folio themes scaffold ID
 
 This is how the end-to-end fixtures are generated, and it keeps the engine
 usable without the app.
+
+## Extensibility
+
+There is no plugin runtime in the default app. Themes are the current extension
+point: validated JSON, no executable code, no start-up cost. A future
+manifest-based declarative layer is the next low-risk step; executable
+extensions, if they are ever justified, would use an opt-in external subprocess
+host over JSON-RPC rather than JavaScript in the WebView or a native dynamic
+library. See [plugins.md](plugins.md) for the evaluation, hooks, manifest shape,
+security boundaries, and explicit non-goals.
 
 ## Testing
 
