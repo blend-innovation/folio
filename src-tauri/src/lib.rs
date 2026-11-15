@@ -112,6 +112,17 @@ fn bootstrap(state: State<'_, AppState>) -> Bootstrap {
     }
 }
 
+/// Explicit native drag fallback. This bypasses Tauri's injected drag-region
+/// handler, which depends on a separate capability and only starts a drag when
+/// a `data-tauri-drag-region` element is hit.
+#[tauri::command]
+fn start_window_drag(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "No main window".to_string())?;
+    window.start_dragging().map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 fn show_window(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -755,6 +766,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bootstrap,
             show_window,
+            start_window_drag,
             set_title,
             render_document,
             open_file_dialog,

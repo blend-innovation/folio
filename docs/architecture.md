@@ -119,7 +119,7 @@ See `crates/folio-core/tests/render.rs` for the XSS regression suite.
 
 ## IPC contract
 
-The webview talks to the shell through twelve commands and a handful of events.
+The webview talks to the shell through thirteen commands and a handful of events.
 
 | Command | Result |
 | --- | --- |
@@ -133,6 +133,7 @@ The webview talks to the shell through twelve commands and a handful of events.
 | `reveal_themes` | Opens the user theme folder. |
 | `markdown_default_status` | Whether the bundled app is currently the `.md` handler. |
 | `set_markdown_default` | Makes Folio the LaunchServices handler for `.md` / `.markdown`. |
+| `start_window_drag` | Starts a native window drag from the custom header/rail. |
 | `set_title { title }` | Updates the native window title. |
 | `show_window` | Reveals the window after the first paint. |
 

@@ -186,7 +186,40 @@ async function boot(): Promise<void> {
   }
 }
 
+function installWindowDrag(): void {
+  if (!hasTauri()) return;
+  const interactive =
+    "a[href], button, input, select, textarea, label, summary, " +
+    "[contenteditable='true'], [tabindex]:not([tabindex='-1']), " +
+    "[role='button'], [role='link'], [role='menuitem'], [role='tab'], " +
+    "[role='checkbox'], [role='radio'], [role='switch'], [role='option'], " +
+    "[data-no-drag]";
+
+  // Capture phase: run before any click handlers (and before Tauri's injected
+  // drag script) so the native drag actually starts from these surfaces.
+  document.addEventListener(
+    "mousedown",
+    (event) => {
+      if (event.button !== 0 || event.detail > 1) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!target.closest("[data-folio-drag-region]")) return;
+      if (target.closest(interactive)) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void invoke("start_window_drag").catch((error: unknown) => {
+        // A failed drag should never turn into an error toast, but leave a
+        // breadcrumb for a developer with Web Inspector open.
+        console.warn("Folio: window drag failed", error);
+      });
+    },
+    true,
+  );
+}
+
 function installEventListeners(): void {
+  installWindowDrag();
   railToggle.addEventListener("click", () => runAction("toggle-outline"));
   railClose.addEventListener("click", closeRail);
   railScrim.addEventListener("click", closeRail);

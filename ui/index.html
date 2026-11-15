@@ -50,8 +50,8 @@
       <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
 
       <aside class="rail" id="rail" aria-label="Contents">
-        <div class="rail-drag" data-tauri-drag-region="deep"></div>
-        <div class="brand">
+        <div class="rail-drag" data-folio-drag-region></div>
+        <div class="brand" data-folio-drag-region>
           <svg class="brand-mark" aria-hidden="true"><use href="#i-leaf" /></svg>
           <span class="brand-name">Folio</span>
           <span class="brand-dot" aria-hidden="true"></span>
@@ -94,11 +94,11 @@
       <div class="rail-scrim" id="rail-scrim" hidden></div>
 
       <main class="stage">
-        <header class="topbar" id="topbar" data-tauri-drag-region="deep">
+        <header class="topbar" id="topbar" data-folio-drag-region>
           <button class="icon-btn rail-toggle" id="rail-toggle" aria-label="Toggle contents" title="Contents (⌘B)">
             <svg class="icon"><use href="#i-panel" /></svg>
           </button>
-          <div class="doc-id" data-tauri-drag-region="deep">
+          <div class="doc-id" data-folio-drag-region>
             <span class="doc-name" id="doc-name">Folio</span>
             <span class="doc-path" id="doc-path">A quiet reader for Markdown</span>
           </div>
