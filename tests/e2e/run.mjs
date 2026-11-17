@@ -133,6 +133,14 @@ await test("a document becomes a designed page", async () => {
     return entry ? entry.duration : null;
   });
   timings.bootMs = boot;
+
+  const loaded = await page.evaluate(() =>
+    performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .filter((name) => /mermaid|flowDiagram|sequenceDiagram/i.test(name)),
+  );
+  assert.deepEqual(loaded, [], "a plain document loaded Mermaid assets");
 });
 
 await test("contents navigates and tracks the section", async () => {
@@ -358,6 +366,96 @@ await test("hiding the rail leaves the document visible and reversible", async (
   assert.equal(restored.hidden, false);
   assert.notEqual(restored.railDisplay, "none");
   assert.ok(Math.abs(restored.stageWidth - before) < 2, "the rail did not return");
+});
+
+await test("HTML and Mermaid snippets can be previewed", async () => {
+  await reset();
+  await openApp(page, server.url);
+  const features = JSON.parse(
+    await readFile(join(ROOT, "ui/dist/fixtures/features.json"), "utf8"),
+  );
+  await page.evaluate((payload) => window.__folio.render(payload), features);
+  await page.waitForSelector(".html-block .code-preview-toggle");
+
+  await page.click(".html-block .code-preview-toggle");
+  await page.waitForSelector(".html-block .html-preview:not([hidden]) iframe");
+  const htmlPreview = await page.evaluate(() => {
+    const block = document.querySelector(".html-block");
+    const frame = block?.querySelector("iframe");
+    const toggle = block?.querySelector(".code-preview-toggle");
+    return {
+      src: frame?.getAttribute("src") ?? "",
+      sandbox: frame?.getAttribute("sandbox"),
+      expanded: toggle?.getAttribute("aria-expanded"),
+      note: block?.querySelector(".html-preview-note")?.textContent ?? "",
+      openButtons: document.querySelectorAll(".code-open-preview:not([hidden])").length,
+    };
+  });
+  assert.match(htmlPreview.src, /^blob:/, "HTML preview did not use a blob URL");
+  assert.equal(htmlPreview.sandbox, "", "HTML preview iframe is not sandboxed");
+  assert.equal(htmlPreview.expanded, "true");
+  assert.match(htmlPreview.note, /Sandboxed preview/);
+  assert.equal(htmlPreview.openButtons, 0, "open-window should be native-only");
+
+  const previewFrame = page.frames().find((frame) => frame.url().startsWith("blob:"));
+  assert.ok(previewFrame, "HTML preview frame was not loaded");
+  const previewContent = await previewFrame.evaluate(() => ({
+    title: document.querySelector("h1")?.textContent,
+    linkHref: document.querySelector("a")?.getAttribute("href") ?? null,
+  }));
+  assert.match(previewContent.title ?? "", /small HTML page/);
+  assert.equal(previewContent.linkHref, null, "preview links were not made inert");
+
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  await page.click(".html-block .code-preview-toggle");
+  assert.equal(
+    await page.$eval(".html-block .html-preview", (node) => node.hidden),
+    true,
+  );
+
+  await page.waitForSelector(".mermaid-block .mermaid-diagram svg", {
+    timeout: 30000,
+  });
+  const mermaid = await page.evaluate(() => {
+    const block = document.querySelector(".mermaid-block");
+    return {
+      state: block?.dataset.mermaidState,
+      theme: block?.dataset.mermaidTheme,
+      sourceHidden: block?.querySelector("pre")?.hidden,
+      sourceButtonHidden: block?.querySelector(".code-source-toggle")?.hidden,
+      svg: !!block?.querySelector(".mermaid-diagram svg"),
+    };
+  });
+  assert.equal(mermaid.state, "ready");
+  assert.equal(mermaid.sourceHidden, true);
+  assert.equal(mermaid.sourceButtonHidden, false);
+  assert.equal(mermaid.svg, true);
+
+  await page.click(".mermaid-block .code-source-toggle");
+  const sourceShown = await page.evaluate(() => {
+    const block = document.querySelector(".mermaid-block");
+    return {
+      sourceHidden: block?.querySelector("pre")?.hidden,
+      diagramHidden: block?.querySelector(".mermaid-diagram")?.hidden,
+      button: block?.querySelector(".code-source-toggle")?.textContent,
+    };
+  });
+  assert.equal(sourceShown.sourceHidden, false);
+  assert.equal(sourceShown.diagramHidden, true);
+  assert.equal(sourceShown.button, "Diagram");
+
+  await page.evaluate(() => window.__folio.theme("blend-dark"));
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".mermaid-block")?.dataset.mermaidTheme ===
+      "blend-dark",
+    { timeout: 30000 },
+  );
+  assert.equal(
+    await page.$eval(".mermaid-block .mermaid-diagram svg", (node) => !!node),
+    true,
+  );
+  await a11y("previews");
 });
 
 await test("a 700 KB document renders quickly in the webview", async () => {

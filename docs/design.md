@@ -40,7 +40,13 @@ accent feel intentional.
 - **Code is a card, not a hole.** White surface, hairline, a small language
   label, and a copy button. The header is deliberately quiet; the code is the
   content. Long blocks collapse after 34 lines with a mask and an explicit
-  “Show N more lines” control.
+  “Show N more lines” control. HTML cards add a quiet **Preview** action and,
+  in the app, **Open** for a separate native window; the preview stays inside
+  the card so source and result can be compared.
+- **Diagrams are still documents.** A Mermaid block becomes a centred,
+  theme-coloured figure with a **Source** toggle. The diagram is rendered only
+  when it approaches the viewport; it should feel like a figure in the page,
+  not an embedded application.
 - **Tables are comparisons.** A single outer card, a muted header row, no
   vertical rules, right-aligned numerals.
 - **Callouts are margin notes with weight.** A tinted surface and a 3 px accent

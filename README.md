@@ -7,7 +7,7 @@ skins.
 
 It is not another Markdown editor, and it is not a browser tab. It is a small
 native app built on a Rust rendering engine and the system WebView. No
-framework, no runtime bundle, no 200 MB Electron shell.
+frontend framework, no bundled browser, no 200 MB Electron shell.
 
 ![Folio reading The Shape of a Good Document in Blend](docs/images/folio-blend.png)
 
@@ -34,19 +34,30 @@ and gives it a page.
 - **A real reading interface.** Sticky contents rail with scroll spy, reading
   progress, find, adjustable text size, code copy, collapsible long snippets,
   and a native menu.
+- **HTML artifacts you can see.** Fenced `html` blocks keep their highlighted
+  source and gain **Preview** and **Open** actions. The inline preview is
+  sandboxed; **Open** puts it in a separate native window. Scripts and network
+  access are disabled in both.
+- **Mermaid, when a document contains it.** `mermaid` fences render as
+  theme-aware diagrams with a Source toggle. The renderer is loaded on demand,
+  only for documents that use a diagram, so ordinary reading keeps its fast
+  start.
 - **GitHub-flavoured Markdown.** Tables, task lists, footnotes, strikethrough,
   smart punctuation, and all five `[!NOTE]`-style callouts.
 - **Syntax highlighting without a highlighter bundle.** A small Rust lexer
   colours Rust, TypeScript/JavaScript, Python, Shell, Go, C/C++, Swift, Java,
   Kotlin, SQL, JSON, YAML, TOML, CSS, HTML, and diffs.
-- **Safe by construction.** Raw HTML is shown as text, never executed. URLs
-  are classified and sanitised. Theme values are validated before they become
-  CSS.
-- **Small.** The UI ships as roughly 31 KB of JavaScript and 36 KB of CSS
-  (minified, before gzip); fonts are local. The native shell is a single Rust binary using
-  the system WebView, not a bundled browser. The release shell binary measured
-  7.5 MB on the Linux validation build; the macOS bundle adds roughly 0.6 MB of
-  UI assets.
+- **Safe by construction.** Raw HTML is shown as text, never executed. HTML
+  previews are opt-in, parsed inertly, and isolated in a sandboxed iframe with
+  scripts and network access disabled. URLs are classified and sanitised.
+  Theme values are validated before they become CSS.
+- **Small by default.** The reader UI is roughly 33 KB of JavaScript and 37 KB
+  of CSS (minified, before gzip); fonts are local. Mermaid adds ~3.3 MB of lazy
+  assets that are only fetched when a document contains a diagram. The native
+  shell is a single Rust binary using the system WebView, not a bundled
+  browser. The release shell binary measured 7.5 MB on the Linux validation
+  build; the macOS bundle adds roughly 0.6 MB of reader assets, plus the
+  on-demand Mermaid assets.
 
 ## Install and run
 
@@ -163,6 +174,21 @@ AVIF are supported; SVG previews are intentionally not inlined.
 External links open in your browser. Relative links to other Markdown files open
 inside Folio; other local links open in their default app.
 
+### HTML previews and Mermaid
+
+A fenced `html` code block is always shown as syntax-highlighted source. Use
+**Preview** to render it inline; use **Open** to put the same sandboxed preview
+in a separate native window. The preview is intentionally self-contained:
+inline CSS and data-URL images work, but scripts, links, external stylesheets,
+remote images, and network requests are blocked.
+
+A fenced `mermaid` block is rendered as a diagram when it scrolls into view.
+**Source** switches back to the diagram source, and Mermaid re-colours the
+diagram when you change themes. Mermaid supports its usual diagram types;
+unsupported or malformed diagrams show their source with a short error instead
+of breaking the page. Folio controls the diagram theme and security settings;
+per-diagram Mermaid frontmatter or `init` config is ignored.
+
 ### Your data
 
 Folio stores only preferences, recent-file paths, window state, and themes in
@@ -233,12 +259,13 @@ The UI bundle is intentionally small:
 
 | Asset | Minified | Gzip |
 | --- | ---: | ---: |
-| JavaScript | 31 KB | 10.3 KB |
-| CSS | 36 KB | 8.2 KB |
+| JavaScript | 33 KB | 10.7 KB |
+| CSS | 37 KB | 8.2 KB |
 | Fonts (local WOFF2, Latin + Latin-ext) | ~500 KB | — |
+| Mermaid (lazy, only when diagrams appear) | ~3.3 MB | — |
 
 The macOS app does not bundle a browser engine; it uses the WebView already on
-the system.
+the system. Mermaid is not requested at launch.
 
 The end-to-end suite needs a local Chrome (set `CHROME_BIN` if it is not in a
 standard location). On macOS, Folio can also be measured by building the `.app`

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the reader and HTML preview windows",
+  "windows": ["main", "html-preview"],
   "permissions": ["core:default"]
 }

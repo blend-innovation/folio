@@ -84,7 +84,11 @@ Two optimizations matter for very large documents:
 1. **Deferred code enhancement.** Only code blocks within 700 px of the viewport
    are measured for the “show more lines” affordance. This removed about 700 ms
    from the 2.2 MB stress document.
-2. **One fragment, one style pass.** The renderer emits final classes and spans;
+2. **Deferred Mermaid.** The Mermaid renderer is a separate set of dynamic
+   chunks. It is not requested at boot, or even on a document load; it is
+   fetched only when a `mermaid` block reaches the same 700 px viewport margin.
+   Ordinary documents never pay for it.
+3. **One fragment, one style pass.** The renderer emits final classes and spans;
    the UI does not walk or re-style code after insertion.
 
 The outline for a 1,100-section document is built in about 10 ms.
@@ -93,18 +97,21 @@ The outline for a 1,100-section document is built in about 10 ms.
 
 | Asset | Raw | Gzip |
 | --- | ---: | ---: |
-| `app.js` (minified ES module) | 31 KB | 10.3 KB |
-| `app.css` (minified, all themes) | 36 KB | 8.2 KB |
+| `app.js` (minified ES module) | 33 KB | 10.7 KB |
+| `app.css` (minified, all themes) | 37 KB | 8.2 KB |
+| `preview.js` (separate preview window) | 1 KB | — |
 | Manrope + Newsreader WOFF2 subsets | 504 KB | — |
-| UI total before app binary | ~0.6 MB | ~18.5 KB JS+CSS |
+| Reader assets before app binary | ~0.6 MB | ~18.9 KB JS+CSS |
+| Mermaid lazy assets (on demand) | ~3.3 MB | — |
 | Release shell binary (Linux measurement) | 7.5 MB | — |
 | Native webview | system WKWebView | — |
 
-There is no bundled Chromium, no React, no Markdown parser, and no highlighter
-in the frontend. The macOS app uses the system WKWebView. The release binary
-figure is from the Linux validation build (`--release`, LTO, stripped); the
-macOS binary will differ slightly but the dependencies and UI assets are the
-same, so expect the same order of magnitude.
+There is no bundled Chromium, no React, no Markdown parser, and no syntax
+highlighter in the frontend. Mermaid is the one sizeable frontend dependency,
+and it is lazy: the boot path remains the small reader. The macOS app uses the
+system WKWebView. The release binary figure is from the Linux validation build
+(`--release`, LTO, stripped); the macOS binary will differ slightly but the
+dependencies and UI assets are the same, so expect the same order of magnitude.
 
 ## Reproduce
 

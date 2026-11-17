@@ -356,6 +356,23 @@ fn xss_payloads_never_escape() {
 }
 
 #[test]
+fn html_and_mermaid_fences_keep_their_preview_language() {
+    let doc = r("```html
+<h1>Preview</h1>
+```
+
+```mermaid
+flowchart LR
+  A --> B
+```
+");
+    assert!(doc.html.contains(r#"data-lang="html""#));
+    assert!(doc.html.contains(r#"data-lang="mermaid""#));
+    assert!(doc.html.contains("Preview"));
+    assert!(doc.html.contains("&lt;"));
+}
+
+#[test]
 fn large_document_renders_in_one_pass() {
     let mut md = String::new();
     for i in 0..1500 {

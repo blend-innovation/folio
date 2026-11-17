@@ -88,10 +88,54 @@ const medium = {
   sample: true,
 };
 
+const featuresMarkdown = `# Preview features
+
+## HTML artifact
+
+\`\`\`html
+<!doctype html>
+<html>
+  <head>
+    <style>
+      body { margin: 0; padding: 24px; background: #f3efe5; color: #24352c; }
+      h1 { font: 600 28px Georgia, serif; }
+      p { font: 16px/1.6 sans-serif; }
+    </style>
+  </head>
+  <body>
+    <h1>A small HTML page</h1>
+    <p>This should render inside a sandboxed preview.</p>
+    <a href="https://example.com">Inert preview link</a>
+  </body>
+</html>
+\`\`\`
+
+## Mermaid diagram
+
+\`\`\`mermaid
+flowchart LR
+  A[Markdown] --> B[Folio]
+  B --> C[Diagram]
+\`\`\`
+`;
+const featuresPath = resolve(root, "ui/dist/fixtures/features.md");
+await writeFile(featuresPath, featuresMarkdown);
+const featuresRendered = JSON.parse(run(["render", featuresPath, "--json"]));
+const features = {
+  path: ":features",
+  name: "features.md",
+  html: featuresRendered.html,
+  meta: featuresRendered.meta,
+  size: Buffer.byteLength(featuresMarkdown),
+  modifiedMs: 0,
+  sample: true,
+};
+
 await writeFile(`${outDir}/bootstrap.json`, JSON.stringify(bootstrap, null, 2));
 await writeFile(`${outDir}/sample.md`, source);
 await writeFile(`${outDir}/large.json`, JSON.stringify(large));
 await writeFile(`${outDir}/medium.json`, JSON.stringify(medium));
+await writeFile(`${outDir}/features.json`, JSON.stringify(features));
 console.log(
-  `fixtures: ${document.meta.stats.words} words, ${themes.themes.length} themes, ${(JSON.stringify(bootstrap).length / 1024).toFixed(0)} KB; medium ${(medium.html.length / 1024).toFixed(0)} KB HTML; large ${(large.html.length / 1024 / 1024).toFixed(1)} MB HTML`,
+  `fixtures: ${document.meta.stats.words} words, ${themes.themes.length} themes, ${(JSON.stringify(bootstrap).length / 1024).toFixed(0)} KB; medium ${(medium.html.length / 1024).toFixed(0)} KB HTML; large ${(large.html.length / 1024 / 1024).toFixed(1)} MB HTML; features ${features.meta.stats.codeBlocks} code blocks`,
 );

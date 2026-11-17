@@ -10,16 +10,23 @@ async function copyStatic() {
   await cp("ui/assets", `${outdir}/assets`, { recursive: true });
   const html = await readFile("ui/index.html", "utf8");
   await writeFile(`${outdir}/index.html`, html);
+  const preview = await readFile("ui/preview.html", "utf8");
+  await writeFile(`${outdir}/preview.html`, preview);
 }
 
 await rm(outdir, { recursive: true, force: true });
 await copyStatic();
 
 const options = {
-  entryPoints: ["ui/src/main.ts"],
+  entryPoints: {
+    app: "ui/src/main.ts",
+    preview: "ui/src/preview.ts",
+  },
   outdir,
-  entryNames: "app",
+  entryNames: "[name]",
+  chunkNames: "chunks/[name]-[hash]",
   bundle: true,
+  splitting: true,
   format: "esm",
   target: ["safari15", "chrome105"],
   minify: !watch,

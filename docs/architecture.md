@@ -38,9 +38,12 @@ machine; the browser's DOM work is the remaining cost for very large files.
 native menu, native file dialogs, drag and drop, and the system WebView. There
 is no bundled Chromium and no Node runtime in the shipped app.
 
-**The UI is one page.** A single HTML file, a single stylesheet, and a single
-ES module. The article is replaced as one fragment. Everything around it —
-rail, chrome, find, theme picker — is small, dependency-free DOM code.
+**The UI is a small page plus a preview page.** The reader is one HTML file, a
+stylesheet, and a module split into a few TypeScript sources. Mermaid is a
+lazy dependency fetched only when a document contains a diagram. The article
+is replaced as one fragment. Everything around it — rail, chrome, find, theme picker — is
+small DOM code. A second, minimal page hosts HTML previews in separate native
+windows.
 
 ## The rendering pipeline
 
@@ -79,6 +82,8 @@ The UI relies on the renderer's markup:
 | `p.lead` | First paragraph after the title. |
 | `h1`–`h6[id]` + `.heading-anchor` | Stable outline targets. |
 | `.code-block[data-lang]` | Header, language label, copy button, scrollable `pre`. |
+| `.code-block[data-lang="html"]` | The UI adds sandboxed **Preview** and native **Open** actions. |
+| `.code-block[data-lang="mermaid"]` | The UI replaces the source with a rendered diagram and a Source toggle. |
 | `.callout[data-kind]` | GFM alert. |
 | `.document` figures: `figure.doc-figure > img + figcaption` | Standalone image. |
 | `img[data-local-image]` | Local image the host should read and inline. |
@@ -96,6 +101,19 @@ Folio reads files that an agent wrote. It treats them as untrusted input.
 - **Raw HTML is never parsed as HTML.** pulldown-cmark's `Html` and
   `InlineHtml` events are escaped. HTML blocks are shown as source in a
   `<pre class="raw-html">`.
+- **HTML previews are inert and opt-in.** The UI parses a fenced HTML block
+  with `DOMParser` (which does not execute it), injects a restrictive CSP, and
+  loads the result in a `sandbox=""` iframe. Scripts, forms, links, external
+  styles, remote images, and network access are blocked. The separate preview
+  window uses the same iframe and blob-document path. The only CSP change is
+  `frame-src 'self' blob:`.
+- **Mermaid is a trusted renderer with a strict mode.** Diagram source is
+  rendered by lazily imported Mermaid modules with
+  `securityLevel: "strict"` and HTML labels disabled. Per-diagram frontmatter
+  and `init` directives are stripped before rendering so they cannot lower that
+  level or replace the reading theme. The rendered SVG is inserted only after
+  Mermaid has parsed and sanitised it. The source remains available behind the
+  Source toggle.
 - **Links are classified.** `http`, `https`, `ftp`, `mailto`, and `tel` are
   allowed. `javascript:`, `vbscript:`, `data:`, `file:`, and unknown schemes
   become non-clickable `.link-blocked` spans. Whitespace and control characters
@@ -119,7 +137,7 @@ See `crates/folio-core/tests/render.rs` for the XSS regression suite.
 
 ## IPC contract
 
-The webview talks to the shell through thirteen commands and a handful of events.
+The webview talks to the shell through fifteen commands and a handful of events.
 
 | Command | Result |
 | --- | --- |
@@ -134,6 +152,8 @@ The webview talks to the shell through thirteen commands and a handful of events
 | `markdown_default_status` | Whether the bundled app is currently the `.md` handler. |
 | `set_markdown_default` | Makes Folio the LaunchServices handler for `.md` / `.markdown`. |
 | `start_window_drag` | Starts a native window drag from the custom header/rail. |
+| `open_html_preview { html, title? }` | Opens or refreshes the sandboxed HTML preview window (8 MB cap). |
+| `html_preview_source` | Returns the current HTML source to the preview page. |
 | `set_title { title }` | Updates the native window title. |
 | `show_window` | Reveals the window after the first paint. |
 
@@ -256,6 +276,6 @@ security boundaries, and explicit non-goals.
 | `folio-core` unit tests | escaping, slugs, frontmatter, path classification, theme validation, highlighter families |
 | `folio-core` integration | headings, callouts, tables, tasks, figures, footnotes, links, raw HTML, XSS, stats, Unicode, CRLF |
 | `folio-cli` integration | stdout, JSON, `--out`, stdin, errors, theme listing/scaffolding |
-| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, find, clipboard, text size, default-app prompt, responsive rail, axe, large-document timing |
+| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, find, clipboard, text size, default-app prompt, responsive rail, HTML preview, Mermaid rendering/theme refresh, axe, large-document timing |
 | criterion | render and highlight throughput across 8 KB/100 KB/1 MB plus no-highlight |
 | `bench/run.mjs` | release CLI wall clock and HTML growth, including process startup |

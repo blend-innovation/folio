@@ -8,6 +8,7 @@ import {
 } from "./bridge";
 import { FindController } from "./find";
 import { OutlineController, scrollToId } from "./outline";
+import { mountPreview } from "./preview-frame";
 performance.mark("folio:module-start");
 
 import type {
@@ -417,6 +418,7 @@ function applyTheme(): void {
 
   applyTextScale();
   requestAnimationFrame(() => outline.measure());
+  void refreshMermaidTheme();
 }
 
 function applyTextScale(): void {
@@ -1058,9 +1060,17 @@ function enhanceCode(): void {
 
 function enhanceCodeBlock(block: HTMLElement): void {
   if (block.dataset.enhanced === "true") return;
-  const code = block.querySelector("pre code");
+  const code = block.querySelector<HTMLElement>("pre code");
   if (!code) return;
   block.dataset.enhanced = "true";
+
+  const lang = block.dataset.lang ?? "";
+  if (lang === "html") enhanceHtmlBlock(block, code);
+  if (lang === "mermaid") {
+    enhanceMermaidBlock(block, code);
+    return;
+  }
+
   const lines = (code.textContent ?? "").split("\n").length;
   if (lines <= 34) return;
   block.classList.add("is-collapsible");
@@ -1077,6 +1087,216 @@ function enhanceCodeBlock(block: HTMLElement): void {
     requestAnimationFrame(() => outline.measure());
   });
   block.append(button);
+}
+
+function htmlPreviewTitle(source: string): string {
+  try {
+    const doc = new DOMParser().parseFromString(source, "text/html");
+    const title = (doc.title || doc.querySelector("h1")?.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return title ? title.slice(0, 80) : "HTML Preview";
+  } catch {
+    return "HTML Preview";
+  }
+}
+
+let htmlPreviewSeq = 0;
+
+function enhanceHtmlBlock(block: HTMLElement, code: HTMLElement): void {
+  const head = block.querySelector<HTMLElement>(".code-head");
+  const pre = block.querySelector<HTMLPreElement>("pre");
+  if (!head || !pre) return;
+  block.classList.add("html-block");
+
+  const actions = document.createElement("div");
+  actions.className = "code-actions";
+  const copy = block.querySelector<HTMLElement>(".code-copy");
+  if (copy) actions.append(copy);
+
+  const panelId = `html-preview-${++htmlPreviewSeq}`;
+  const preview = document.createElement("button");
+  preview.type = "button";
+  preview.className = "code-action code-preview-toggle";
+  preview.textContent = "Preview";
+  preview.title = "Preview this HTML in a sandbox";
+  preview.setAttribute("aria-expanded", "false");
+  preview.setAttribute("aria-controls", panelId);
+
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "code-action code-open-preview";
+  open.textContent = "Open";
+  open.title = "Open this HTML preview in a new window";
+  open.setAttribute("aria-label", "Open HTML preview in a new window");
+
+  actions.prepend(open);
+  actions.prepend(preview);
+
+  if (!hasTauri()) open.hidden = true;
+  head.append(actions);
+
+  const panel = document.createElement("div");
+  panel.className = "html-preview";
+  panel.id = panelId;
+  panel.hidden = true;
+
+  const frame = document.createElement("iframe");
+  frame.title = "HTML preview";
+  frame.setAttribute("sandbox", "");
+  frame.setAttribute("referrerpolicy", "no-referrer");
+
+  const note = document.createElement("p");
+  note.className = "html-preview-note";
+  note.textContent = "Sandboxed preview · scripts and network disabled";
+  panel.append(frame, note);
+  pre.after(panel);
+
+  let clearPreview: (() => void) | null = null;
+
+  preview.addEventListener("click", () => {
+    const opening = panel.hidden;
+    if (opening) {
+      clearPreview?.();
+      clearPreview = mountPreview(frame, code.textContent ?? "");
+      panel.hidden = false;
+    } else {
+      clearPreview?.();
+      clearPreview = null;
+      panel.hidden = true;
+    }
+    preview.textContent = opening ? "Hide preview" : "Preview";
+    preview.setAttribute("aria-expanded", String(opening));
+    block.classList.toggle("is-previewing", opening);
+    requestAnimationFrame(() => outline.measure());
+  });
+
+  open.addEventListener("click", () => {
+    const source = code.textContent ?? "";
+    void invoke("open_html_preview", {
+      html: source,
+      title: htmlPreviewTitle(source),
+    }).catch((error: unknown) => showToast(errorText(error)));
+  });
+}
+
+let mermaidImport: Promise<typeof import("./mermaid")> | null = null;
+const mermaidRenderTokens = new WeakMap<HTMLElement, number>();
+
+function loadMermaid(): Promise<typeof import("./mermaid")> {
+  mermaidImport ??= import("./mermaid");
+  return mermaidImport;
+}
+
+function enhanceMermaidBlock(block: HTMLElement, code: HTMLElement): void {
+  const head = block.querySelector<HTMLElement>(".code-head");
+  const pre = block.querySelector<HTMLPreElement>("pre");
+  if (!head || !pre) return;
+  block.classList.add("mermaid-block");
+  block.dataset.mermaidState = "idle";
+
+  const actions = document.createElement("div");
+  actions.className = "code-actions";
+  const copy = block.querySelector<HTMLElement>(".code-copy");
+  if (copy) actions.append(copy);
+
+  const sourceButton = document.createElement("button");
+  sourceButton.type = "button";
+  sourceButton.className = "code-action code-source-toggle";
+  sourceButton.textContent = "Source";
+  sourceButton.hidden = true;
+  sourceButton.setAttribute("aria-expanded", "false");
+  actions.prepend(sourceButton);
+  head.append(actions);
+
+  const diagram = document.createElement("div");
+  diagram.className = "mermaid-diagram";
+  diagram.setAttribute("role", "img");
+  diagram.setAttribute("aria-label", "Mermaid diagram");
+  diagram.hidden = true;
+
+  const error = document.createElement("p");
+  error.className = "mermaid-error";
+  error.hidden = true;
+  pre.after(diagram, error);
+
+  sourceButton.addEventListener("click", () => {
+    const showSource = pre.hidden;
+    pre.hidden = !showSource;
+    diagram.hidden = showSource;
+    sourceButton.textContent = showSource ? "Diagram" : "Source";
+    sourceButton.setAttribute("aria-expanded", String(showSource));
+    requestAnimationFrame(() => outline.measure());
+  });
+
+  void renderMermaidBlock(block, code);
+}
+
+async function renderMermaidBlock(
+  block: HTMLElement,
+  code: HTMLElement,
+  force = false,
+): Promise<void> {
+  const pre = block.querySelector<HTMLPreElement>("pre");
+  const diagram = block.querySelector<HTMLElement>(".mermaid-diagram");
+  const error = block.querySelector<HTMLElement>(".mermaid-error");
+  const sourceButton = block.querySelector<HTMLButtonElement>(".code-source-toggle");
+  if (!pre || !diagram || !error || !sourceButton) return;
+  if (!force && ["pending", "ready"].includes(block.dataset.mermaidState ?? "")) {
+    return;
+  }
+
+  const source = code.textContent ?? "";
+  if (!source.trim()) {
+    error.textContent = "This Mermaid block is empty.";
+    error.hidden = false;
+    return;
+  }
+
+  const sourceWasVisible =
+    force && block.dataset.mermaidState === "ready" && !pre.hidden;
+  const token = (mermaidRenderTokens.get(block) ?? 0) + 1;
+  mermaidRenderTokens.set(block, token);
+  block.dataset.mermaidState = "pending";
+
+  try {
+    const { renderMermaid } = await loadMermaid();
+    if (!block.isConnected || mermaidRenderTokens.get(block) !== token) return;
+
+    const svg = await renderMermaid(source);
+    if (!block.isConnected || mermaidRenderTokens.get(block) !== token) return;
+
+    diagram.innerHTML = svg;
+    diagram.hidden = sourceWasVisible;
+    pre.hidden = !sourceWasVisible;
+    error.hidden = true;
+    sourceButton.hidden = false;
+    sourceButton.textContent = sourceWasVisible ? "Diagram" : "Source";
+    sourceButton.setAttribute("aria-expanded", String(sourceWasVisible));
+    block.dataset.mermaidState = "ready";
+    block.dataset.mermaidTheme = document.documentElement.dataset.theme ?? "";
+  } catch (renderError) {
+    if (!block.isConnected || mermaidRenderTokens.get(block) !== token) return;
+    console.warn("Folio: Mermaid render failed", renderError);
+    block.dataset.mermaidState = "error";
+    pre.hidden = false;
+    diagram.hidden = true;
+    sourceButton.hidden = true;
+    error.textContent = "This diagram could not be rendered. Showing the source.";
+    error.hidden = false;
+  }
+
+  requestAnimationFrame(() => outline.measure());
+}
+
+function refreshMermaidTheme(): void {
+  const blocks = docElement.querySelectorAll<HTMLElement>(
+    '.mermaid-block[data-mermaid-state="ready"]',
+  );
+  for (const block of blocks) {
+    const code = block.querySelector<HTMLElement>("pre code");
+    if (code) void renderMermaidBlock(block, code, true);
+  }
 }
 
 async function loadImages(token: number): Promise<void> {

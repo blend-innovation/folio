@@ -15,13 +15,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, State, Wry};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::StateFlags;
 
 const MAX_DOCUMENT_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 24 * 1024 * 1024;
+const MAX_PREVIEW_BYTES: usize = 8 * 1024 * 1024;
 const SAMPLE_MARKDOWN: &str = include_str!("../../docs/sample.md");
 const SUPPORTED_EXTENSIONS: &[&str] = &[
     "md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt", "text",
@@ -72,6 +73,7 @@ pub struct AppState {
     booted: AtomicBool,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
     recents: Mutex<Vec<RecentFile>>,
+    preview_html: Mutex<Option<String>>,
     themes: ThemeCatalog,
     themes_dir: PathBuf,
 }
@@ -84,6 +86,7 @@ impl AppState {
             booted: AtomicBool::new(false),
             watcher: Mutex::new(None),
             recents: Mutex::new(recents),
+            preview_html: Mutex::new(None),
             themes,
             themes_dir,
         }
@@ -121,6 +124,61 @@ fn start_window_drag(app: AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "No main window".to_string())?;
     window.start_dragging().map_err(|error| error.to_string())
+}
+
+/// HTML previews are deliberately kept out of the Markdown document itself:
+/// the source block is shown as text, and this command opens a separate native
+/// window whose content page isolates the preview in a sandboxed iframe.
+#[tauri::command]
+async fn open_html_preview(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    html: String,
+    title: Option<String>,
+) -> Result<(), String> {
+    if html.len() > MAX_PREVIEW_BYTES {
+        return Err("HTML preview is too large (limit: 8 MB).".into());
+    }
+
+    let title = preview_title(title.as_deref());
+    *state.preview_html.lock().unwrap() = Some(html);
+
+    if let Some(window) = app.get_webview_window("html-preview") {
+        let _ = window.set_title(&title);
+        let _ = window.eval("window.location.reload()");
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(&app, "html-preview", WebviewUrl::App("preview.html".into()))
+        .title(&title)
+        .inner_size(1024.0, 768.0)
+        .min_inner_size(520.0, 360.0)
+        .resizable(true)
+        .build()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn html_preview_source(state: State<'_, AppState>) -> Option<String> {
+    state.preview_html.lock().unwrap().clone()
+}
+
+fn preview_title(title: Option<&str>) -> String {
+    let first = title.unwrap_or_default().lines().next().unwrap_or_default();
+    let cleaned = first
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(80)
+        .collect::<String>();
+    let cleaned = cleaned.trim();
+    if cleaned.is_empty() {
+        "HTML Preview — Folio".into()
+    } else {
+        format!("{cleaned} — Folio")
+    }
 }
 
 #[tauri::command]
@@ -767,6 +825,8 @@ pub fn run() {
             bootstrap,
             show_window,
             start_window_drag,
+            open_html_preview,
+            html_preview_source,
             set_title,
             render_document,
             open_file_dialog,
@@ -1067,6 +1127,16 @@ mod tests {
 
         let missing = load_document(&dir.path().join("missing.md")).unwrap_err();
         assert!(!missing.is_empty());
+    }
+
+    #[test]
+    fn preview_titles_are_single_line_and_bounded() {
+        assert_eq!(preview_title(None), "HTML Preview — Folio");
+        assert_eq!(preview_title(Some("Hello\nworld")), "Hello — Folio");
+        assert_eq!(preview_title(Some("  ")), "HTML Preview — Folio");
+        let long = preview_title(Some(&"x".repeat(200)));
+        assert!(long.ends_with(" — Folio"));
+        assert!(long.chars().count() <= 88);
     }
 
     #[test]
