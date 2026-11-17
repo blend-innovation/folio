@@ -320,6 +320,46 @@ await test("the rail becomes a drawer on a narrow window", async () => {
   ]);
 });
 
+await test("hiding the rail leaves the document visible and reversible", async () => {
+  await openSample();
+  const before = await page.$eval(".stage", (node) => node.getBoundingClientRect().width);
+  await page.click("#rail-toggle");
+
+  const hidden = await page.evaluate(() => {
+    const stage = document.querySelector(".stage").getBoundingClientRect();
+    const toggle = document.getElementById("rail-toggle").getBoundingClientRect();
+    return {
+      hidden: document.getElementById("app").classList.contains("is-rail-hidden"),
+      railDisplay: getComputedStyle(document.getElementById("rail")).display,
+      stageWidth: stage.width,
+      stageLeft: stage.left,
+      toggleWidth: toggle.width,
+      docVisible: document.querySelectorAll("#doc .doc-title").length > 0,
+    };
+  });
+  assert.equal(hidden.hidden, true);
+  assert.equal(hidden.railDisplay, "none");
+  assert.equal(hidden.stageLeft, 0);
+  assert.ok(hidden.stageWidth > before, `stage did not expand: ${before} -> ${hidden.stageWidth}`);
+  assert.ok(hidden.toggleWidth > 0, "the rail toggle disappeared with the rail");
+  assert.equal(hidden.docVisible, true);
+
+  // runAction() guards against accidental double toggles for 90 ms.
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  await page.click("#rail-toggle");
+  const restored = await page.evaluate(() => {
+    const stage = document.querySelector(".stage").getBoundingClientRect();
+    return {
+      hidden: document.getElementById("app").classList.contains("is-rail-hidden"),
+      railDisplay: getComputedStyle(document.getElementById("rail")).display,
+      stageWidth: stage.width,
+    };
+  });
+  assert.equal(restored.hidden, false);
+  assert.notEqual(restored.railDisplay, "none");
+  assert.ok(Math.abs(restored.stageWidth - before) < 2, "the rail did not return");
+});
+
 await test("a 700 KB document renders quickly in the webview", async () => {
   await reset();
   const large = JSON.parse(
