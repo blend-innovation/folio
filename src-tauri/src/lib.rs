@@ -28,6 +28,12 @@ const SUPPORTED_EXTENSIONS: &[&str] = &[
     "md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt", "text",
 ];
 
+/// macOS may deliver an `openURLs` AppleEvent before Tauri has run `.setup`.
+/// Keep that path outside managed state so a launch-through-Finder open cannot
+/// panic before the app is initialized.
+#[cfg(target_os = "macos")]
+static PENDING_OPEN: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecentFile {
@@ -725,7 +731,10 @@ Host file-open events
 
 #[cfg(target_os = "macos")]
 fn register_open(app: &AppHandle, path: PathBuf) {
-    let state = app.state::<AppState>();
+    let Some(state) = app.try_state::<AppState>() else {
+        *PENDING_OPEN.lock().unwrap() = Some(path);
+        return;
+    };
     let emit = {
         let _guard = state.open_lock.lock().unwrap();
         if state.booted.load(Ordering::SeqCst) {
@@ -806,6 +815,12 @@ pub fn run() {
                 *state.initial_path.lock().unwrap() = Some(path);
             }
             app.manage(state);
+
+            // Consume an early Finder/LaunchServices open now that state exists.
+            #[cfg(target_os = "macos")]
+            if let Some(path) = PENDING_OPEN.lock().unwrap().take() {
+                *app.state::<AppState>().initial_path.lock().unwrap() = Some(path);
+            }
 
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
