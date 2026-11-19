@@ -184,7 +184,12 @@ inside Folio; other local links open in their default app.
 
 A fenced `html` code block is always shown as syntax-highlighted source. Use
 **Preview** to render it inline; use **Open** to put the same sandboxed preview
-in a separate native window. The preview is intentionally self-contained:
+in a separate native window.
+
+A complete HTML document — a `.html` / `.htm` file, or a `.md` file whose body
+starts with an HTML doctype/root — opens in full-document preview mode, with a
+**Source** toggle and **Open window** action. Raw HTML fragments inside a normal
+Markdown document remain escaped. The preview is intentionally self-contained:
 inline CSS and data-URL images work, but scripts, links, external stylesheets,
 remote images, and network requests are blocked.
 

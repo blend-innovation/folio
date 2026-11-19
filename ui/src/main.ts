@@ -336,7 +336,18 @@ function installEventListeners(): void {
     dropOverlay.hidden = true;
     const file = payload?.paths?.find((path) => {
       const ext = path.split(".").pop()?.toLowerCase() ?? "";
-      return ["md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt", "text"].includes(ext);
+      return [
+        "md",
+        "markdown",
+        "mdown",
+        "mkd",
+        "mkdn",
+        "mdx",
+        "txt",
+        "text",
+        "html",
+        "htm",
+      ].includes(ext);
     });
     if (file) void openPath(file);
     else showToast("Drop a Markdown or plain text file.");
@@ -656,8 +667,29 @@ function renderDocument(
   const token = ++state.renderToken;
 
   app.dataset.state = "doc";
+  app.dataset.kind = typeof payload.rawHtml === "string" ? "html" : "markdown";
+  app.classList.remove("is-html");
   welcome.hidden = true;
   docElement.hidden = false;
+
+  if (typeof payload.rawHtml === "string") {
+    app.classList.add("is-html");
+    renderHtmlDocument(payload);
+    updateChrome(payload);
+    updateFindAvailability();
+    outline.clear();
+    finder.close();
+    notes.clear();
+    scrollElement.scrollTop = 0;
+    progressBar.style.transform = "scaleX(0)";
+    app.classList.remove("is-scrolled");
+    const title = prettyName(payload.name) || "HTML document";
+    document.title = `${title} · Folio`;
+    maybeOfferDefaultApp(payload);
+    invoke("set_title", { title: document.title }).catch(() => {});
+    return;
+  }
+
   performance.clearMarks("folio:html-start");
   performance.clearMarks("folio:html-complete");
   performance.clearMarks("folio:decorate-complete");
@@ -738,7 +770,8 @@ function defaultAppPreference(): string | null {
 }
 
 function maybeOfferDefaultApp(payload: DocumentPayload): void {
-  if (payload.sample || state.boot?.platform !== "macos") return;
+  if (payload.sample || typeof payload.rawHtml === "string") return;
+  if (state.boot?.platform !== "macos") return;
   if (!isMarkdownPath(payload.path)) return;
   if (defaultPromptChecked || defaultPromptShown) return;
   if (defaultAppPreference()) return;
@@ -841,6 +874,8 @@ function showWelcome(): void {
   state.document = null;
   homeButton.hidden = true;
   app.dataset.state = "welcome";
+  delete app.dataset.kind;
+  app.classList.remove("is-html");
   notes.clear();
   if (hasTauri()) invoke("stop_watching").catch(() => {});
   codeObserver?.disconnect();
@@ -904,12 +939,91 @@ function renderRecents(recents: RecentFile[]): void {
   }
 }
 
+function renderHtmlDocument(payload: DocumentPayload): void {
+  const source = payload.rawHtml ?? "";
+  docElement.replaceChildren();
+
+  const section = document.createElement("section");
+  section.className = "html-document";
+
+  const head = document.createElement("div");
+  head.className = "html-document-head";
+  const label = document.createElement("p");
+  label.className = "eyebrow";
+  label.textContent = "HTML document";
+  const actions = document.createElement("div");
+  actions.className = "html-document-actions";
+
+  const sourceButton = document.createElement("button");
+  sourceButton.type = "button";
+  sourceButton.className = "html-document-action";
+  sourceButton.textContent = "Source";
+  sourceButton.setAttribute("aria-expanded", "false");
+
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "html-document-action";
+  openButton.textContent = "Open window";
+  if (!hasTauri()) openButton.hidden = true;
+
+  actions.append(sourceButton, openButton);
+  head.append(label, actions);
+
+  const frame = document.createElement("iframe");
+  frame.className = "html-document-frame";
+  frame.title = "HTML document preview";
+  frame.setAttribute("sandbox", "");
+  frame.setAttribute("referrerpolicy", "no-referrer");
+
+  const sourceView = document.createElement("pre");
+  sourceView.className = "html-document-source";
+  sourceView.textContent = source;
+  sourceView.hidden = true;
+  sourceView.tabIndex = 0;
+
+  section.append(head, frame, sourceView);
+  docElement.append(section);
+  mountPreview(frame, source);
+
+  sourceButton.addEventListener("click", () => {
+    const showSource = sourceView.hidden;
+    sourceView.hidden = !showSource;
+    frame.hidden = showSource;
+    sourceButton.textContent = showSource ? "Preview" : "Source";
+    sourceButton.setAttribute("aria-expanded", String(showSource));
+    requestAnimationFrame(() => outline.measure());
+  });
+
+  openButton.addEventListener("click", () => {
+    void invoke("open_html_preview", {
+      html: source,
+      title: htmlPreviewTitle(source),
+    }).catch((error: unknown) => showToast(errorText(error)));
+  });
+}
+
 function updateChrome(payload: DocumentPayload): void {
   docName.textContent = payload.name;
   docPath.textContent = payload.sample
     ? "Built-in sample"
     : shortenHome(payload.path);
   docPath.title = payload.sample ? "A document that ships with Folio" : payload.path;
+
+  if (typeof payload.rawHtml === "string") {
+    colophon.hidden = true;
+    docStats.replaceChildren();
+    const kind = document.createElement("span");
+    kind.textContent = "HTML document";
+    docStats.append(kind);
+    if (!payload.sample) {
+      const live = document.createElement("span");
+      live.className = "live-dot";
+      live.title = "Watching for changes";
+      docStats.append(live);
+    }
+    return;
+  }
+
   colophon.hidden = false;
   colophonTheme.textContent = state.activeTheme
     ? `Set in ${state.activeTheme.name}`
@@ -1411,7 +1525,8 @@ function onScroll(): void {
 }
 
 function updateFindAvailability(): void {
-  const enabled = state.document !== null;
+  const enabled =
+    state.document !== null && typeof state.document.rawHtml !== "string";
   findButton.disabled = !enabled;
   findButton.setAttribute("aria-disabled", String(!enabled));
 }

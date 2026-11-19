@@ -83,6 +83,27 @@ await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => request
 await screenshot(page, "find-studio.png");
 await page.evaluate(() => document.getElementById("find-close").click());
 
+// Full HTML document
+await load();
+const htmlDocument = JSON.parse(
+  await readFile(join(process.cwd(), "ui/dist/fixtures/features.json"), "utf8"),
+);
+await page.evaluate(
+  (payload) =>
+    window.__folio.render({
+      ...payload,
+      path: "/Users/ada/notes/page.html",
+      name: "page.html",
+      html: "",
+      rawHtml:
+        "<!doctype html><html><head><style>body{margin:0;padding:32px;background:#f3efe5;color:#24352c;font:16px/1.6 -apple-system}</style></head><body><h1>Standalone page</h1><p>Hello from an HTML document.</p></body></html>",
+      sample: false,
+    }),
+  htmlDocument,
+);
+await page.waitForSelector(".html-document-frame");
+await screenshot(page, "html-document.png");
+
 // Notes states
 await load();
 await theme("blend");

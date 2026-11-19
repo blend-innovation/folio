@@ -35,6 +35,7 @@ export interface DocumentPayload {
   size: number;
   modifiedMs: number;
   sourceHash?: string;
+  rawHtml?: string;
   sample: boolean;
 }
 

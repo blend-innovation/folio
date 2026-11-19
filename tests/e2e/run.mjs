@@ -458,6 +458,53 @@ await test("HTML and Mermaid snippets can be previewed", async () => {
   await a11y("previews");
 });
 
+await test("full HTML documents open in a sandboxed preview", async () => {
+  await reset();
+  await openApp(page, server.url);
+  const features = JSON.parse(
+    await readFile(join(ROOT, "ui/dist/fixtures/features.json"), "utf8"),
+  );
+  await page.evaluate(
+    (payload) =>
+      window.__folio.render({
+        ...payload,
+        path: "/Users/ada/notes/page.html",
+        name: "page.html",
+        html: "",
+        rawHtml:
+          "<!doctype html><html><body><h1>Standalone page</h1><p>Hello from HTML.</p></body></html>",
+        sample: false,
+      }),
+    features,
+  );
+  await page.waitForSelector(".html-document-frame");
+  const state = await page.evaluate(() => ({
+    kind: document.getElementById("app").dataset.kind,
+    src: document.querySelector(".html-document-frame")?.getAttribute("src") ?? "",
+    sandbox: document.querySelector(".html-document-frame")?.getAttribute("sandbox"),
+    notesVisible: getComputedStyle(document.getElementById("notes-btn")).display,
+    findVisible: getComputedStyle(document.getElementById("find-btn")).display,
+    openHidden: document.querySelector(".html-document-action[hidden]") !== null,
+  }));
+  assert.equal(state.kind, "html");
+  assert.match(state.src, /^blob:/);
+  assert.equal(state.sandbox, "");
+  assert.equal(state.notesVisible, "none");
+  assert.equal(state.findVisible, "none");
+  assert.equal(state.openHidden, true);
+
+  await page.click(".html-document-action");
+  const source = await page.evaluate(() => ({
+    sourceHidden: document.querySelector(".html-document-source")?.hidden,
+    frameHidden: document.querySelector(".html-document-frame")?.hidden,
+    text: document.querySelector(".html-document-source")?.textContent,
+  }));
+  assert.equal(source.sourceHidden, false);
+  assert.equal(source.frameHidden, true);
+  assert.match(source.text ?? "", /Standalone page/);
+  await a11y("html document");
+});
+
 await test("home returns to welcome and can reopen a document", async () => {
   await openSample();
   await page.click("#home-btn");

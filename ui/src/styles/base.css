@@ -2015,3 +2015,126 @@ mark.find-hit.is-current {
     box-shadow: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Full HTML documents
+   -------------------------------------------------------------------------- */
+
+.app[data-kind="html"] .notes-btn,
+.app[data-kind="html"] #find-btn,
+.app[data-kind="html"] .topbar-divider {
+  display: none;
+}
+
+.app.is-html {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.app.is-html .rail,
+.app.is-html .rail-toggle {
+  display: none;
+}
+
+.app.is-html .progress {
+  left: 0;
+}
+
+.is-macos .app.is-html .topbar {
+  padding-left: 84px;
+}
+
+@media (max-width: 1040px) {
+  .app.is-html {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.html-document {
+  max-width: calc(var(--f-measure) + 128px);
+  margin: 0 auto;
+}
+
+.html-document-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.html-document-head .eyebrow {
+  margin: 0;
+}
+
+.html-document-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.html-document-action {
+  min-height: var(--control-height-sm);
+  padding: 0 8px;
+  border: 1px solid var(--f-rule);
+  border-radius: var(--control-radius);
+  background: var(--f-surface);
+  color: var(--f-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.html-document-action:hover {
+  border-color: var(--f-accent);
+  color: var(--f-ink);
+}
+
+.html-document-frame {
+  display: block;
+  width: 100%;
+  height: calc(100dvh - 190px);
+  min-height: 420px;
+  border: 1px solid var(--f-rule);
+  border-radius: var(--f-radius);
+  background: #ffffff;
+  box-shadow: 0 1px 2px var(--f-shadow-color);
+}
+
+.html-document-source {
+  max-height: calc(100dvh - 190px);
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--f-rule);
+  border-radius: var(--f-radius);
+  background: var(--f-surface);
+  color: var(--f-ink);
+  font-family: var(--f-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre;
+}
+
+@media (max-width: 720px) {
+  .html-document-action {
+    font-size: 10px;
+  }
+
+  .html-document-frame,
+  .html-document-source {
+    height: auto;
+    min-height: 360px;
+    max-height: calc(100dvh - 220px);
+  }
+}
+
+@media print {
+  .html-document-head {
+    display: none;
+  }
+
+  .html-document-frame {
+    height: auto;
+    min-height: 0;
+    border: 0;
+  }
+}

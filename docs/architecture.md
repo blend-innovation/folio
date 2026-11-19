@@ -83,6 +83,7 @@ The UI relies on the renderer's markup:
 | `h1`–`h6[id]` + `.heading-anchor` | Stable outline targets. |
 | `.code-block[data-lang]` | Header, language label, copy button, scrollable `pre`. |
 | `.code-block[data-lang="html"]` | The UI adds sandboxed **Preview** and native **Open** actions. |
+| `.html-document` + `.html-document-frame` | Full HTML document mode: sandboxed preview, Source toggle, Open window. |
 | `.code-block[data-lang="mermaid"]` | The UI replaces the source with a rendered diagram and a Source toggle. |
 | `mark.note-mark[data-note-id]` | A restored annotation highlight. Notes and their source hashes live in a sidecar. |
 | `.callout[data-kind]` | GFM alert. |
@@ -99,12 +100,13 @@ Anything not in this table is ordinary prose markup and can be styled freely.
 
 Folio reads files that an agent wrote. It treats them as untrusted input.
 
-- **Raw HTML is never parsed as HTML.** pulldown-cmark's `Html` and
+- **Raw HTML in Markdown is never parsed as HTML.** pulldown-cmark's `Html` and
   `InlineHtml` events are escaped. HTML blocks are shown as source in a
-  `<pre class="raw-html">`.
-- **HTML previews are inert and opt-in.** The UI parses a fenced HTML block
-  with `DOMParser` (which does not execute it), injects a restrictive CSP, and
-  loads the result in a `sandbox=""` iframe. Scripts, forms, links, external
+  `<pre class="raw-html">`. A file that is itself an HTML document is detected
+  before Markdown parsing and gets full-document preview mode.
+- **HTML previews are inert and opt-in.** The UI parses a fenced HTML block or
+  a full HTML document with `DOMParser` (which does not execute it), injects a
+  restrictive CSP, and loads the result in a `sandbox=""` iframe. Scripts, forms, links, external
   styles, remote images, and network access are blocked. The separate preview
   window uses the same iframe and blob-document path. The only CSP change is
   `frame-src 'self' blob:`.
@@ -307,6 +309,6 @@ security boundaries, and explicit non-goals.
 | `folio-core` integration | headings, callouts, tables, tasks, figures, footnotes, links, raw HTML, XSS, stats, Unicode, CRLF |
 | `folio-cli` integration | stdout, JSON, `--out`, stdin, errors, theme listing/scaffolding |
 | `folio-app` unit | image sniffing, path handling, preview titles, configuration parsing, annotation Markdown/hash validation |
-| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, configuration pinning, Home, notes, find, clipboard, text size, default-app prompt, responsive rail, HTML preview, Mermaid rendering/theme refresh, axe, large-document timing |
+| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, configuration pinning, Home, notes, find, clipboard, text size, default-app prompt, responsive rail, fenced HTML preview, full HTML document preview, Mermaid rendering/theme refresh, axe, large-document timing |
 | criterion | render and highlight throughput across 8 KB/100 KB/1 MB plus no-highlight |
 | `bench/run.mjs` | release CLI wall clock and HTML growth, including process startup |

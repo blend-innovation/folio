@@ -47,6 +47,9 @@ accent feel intentional.
   theme-coloured figure with a **Source** toggle. The diagram is rendered only
   when it approaches the viewport; it should feel like a figure in the page,
   not an embedded application.
+- **HTML documents become a frame, not chrome.** A standalone HTML file is shown
+  in a sandboxed page frame with only Source and Open actions. Folio does not
+  dress an HTML artifact in reading typography or pretend it is Markdown.
 - **Notes are marginalia, not a dashboard.** A selection brings up a small
   `Copy / Note` toolbar. Notes sit in a quiet inspector that starts below the
   topbar on desktop and becomes a bottom sheet on narrow windows. Quotes use

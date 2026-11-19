@@ -26,7 +26,7 @@ const MAX_IMAGE_BYTES: u64 = 24 * 1024 * 1024;
 const MAX_PREVIEW_BYTES: usize = 8 * 1024 * 1024;
 const SAMPLE_MARKDOWN: &str = include_str!("../../docs/sample.md");
 const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt", "text",
+    "md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt", "text", "html", "htm",
 ];
 
 /// macOS may deliver an `openURLs` AppleEvent before Tauri has run `.setup`.
@@ -54,6 +54,8 @@ pub struct DocumentPayload {
     pub size: u64,
     pub modified_ms: u64,
     pub source_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_html: Option<String>,
     pub sample: bool,
 }
 
@@ -291,6 +293,7 @@ async fn open_file_dialog(app: AppHandle) -> Result<Option<DocumentPayload>, Str
             &["md", "markdown", "mdown", "mkd", "mkdn", "mdx"],
         )
         .add_filter("Text", &["txt", "text"])
+        .add_filter("HTML", &["html", "htm"])
         .blocking_pick_file();
     let Some(file) = selected else {
         return Ok(None);
@@ -320,6 +323,7 @@ fn open_sample(app: AppHandle) -> Result<DocumentPayload, String> {
         size: SAMPLE_MARKDOWN.len() as u64,
         modified_ms: 0,
         source_hash: content_hash(SAMPLE_MARKDOWN.as_bytes()),
+        raw_html: None,
         sample: true,
     })
 }
@@ -529,13 +533,19 @@ fn supported(path: &Path) -> bool {
         .is_some_and(|ext| SUPPORTED_EXTENSIONS.contains(&ext.as_str()))
 }
 
+fn looks_like_html(source: &str) -> bool {
+    let source = source.trim_start_matches('\u{feff}').trim_start();
+    let lower = source.to_ascii_lowercase();
+    lower.starts_with("<!doctype html") || lower.starts_with("<html")
+}
+
 fn load_document(path: &Path) -> Result<DocumentPayload, String> {
     let path = std::fs::canonicalize(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if !path.is_file() {
         return Err("That is not a file.".into());
     }
     if !supported(&path) {
-        return Err("Folio reads Markdown and plain text files.".into());
+        return Err("Folio reads Markdown, plain text, and HTML files.".into());
     }
     let metadata = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     if metadata.len() > MAX_DOCUMENT_BYTES {
@@ -543,7 +553,6 @@ fn load_document(path: &Path) -> Result<DocumentPayload, String> {
     }
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let source = String::from_utf8_lossy(&bytes);
-    let rendered = render(&source, &RenderOptions::for_file(&path));
     let name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -554,6 +563,24 @@ fn load_document(path: &Path) -> Result<DocumentPayload, String> {
         .ok()
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map_or(0, |duration| duration.as_millis() as u64);
+    let source_hash = content_hash(&bytes);
+
+    if looks_like_html(&source) {
+        let meta = render("", &RenderOptions::for_file(&path)).meta;
+        return Ok(DocumentPayload {
+            path: path.to_string_lossy().into_owned(),
+            name,
+            html: String::new(),
+            meta,
+            size: metadata.len(),
+            modified_ms,
+            source_hash,
+            raw_html: Some(source.into_owned()),
+            sample: false,
+        });
+    }
+
+    let rendered = render(&source, &RenderOptions::for_file(&path));
     Ok(DocumentPayload {
         path: path.to_string_lossy().into_owned(),
         name,
@@ -561,7 +588,8 @@ fn load_document(path: &Path) -> Result<DocumentPayload, String> {
         meta: rendered.meta,
         size: metadata.len(),
         modified_ms,
-        source_hash: content_hash(&bytes),
+        source_hash,
+        raw_html: None,
         sample: false,
     })
 }
@@ -1442,7 +1470,7 @@ mod tests {
     }
 
     #[test]
-    fn only_markdown_and_text_extensions_are_supported() {
+    fn text_markdown_and_html_extensions_are_supported() {
         for name in [
             "a.md",
             "b.MARKDOWN",
@@ -1451,12 +1479,32 @@ mod tests {
             "e.mkdn",
             "f.mdx",
             "g.txt",
+            "h.html",
+            "i.htm",
         ] {
             assert!(supported(Path::new(name)), "{name}");
         }
-        for name in ["a.png", "b.pdf", "c.html", "d"] {
+        for name in ["a.png", "b.pdf", "c.rtf", "d"] {
             assert!(!supported(Path::new(name)), "{name}");
         }
+    }
+
+    #[test]
+    fn html_documents_are_loaded_as_preview_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("page.md");
+        std::fs::write(
+            &path,
+            "<!DOCTYPE html>\n<html><body><h1>A page</h1></body></html>\n",
+        )
+        .unwrap();
+
+        let payload = load_document(&path).unwrap();
+        assert!(payload.html.is_empty());
+        assert!(payload.raw_html.as_deref().is_some_and(|source| {
+            source.contains("<!DOCTYPE html>") && source.contains("A page")
+        }));
+        assert!(!payload.source_hash.is_empty());
     }
 
     #[test]
@@ -1498,7 +1546,7 @@ mod tests {
         let path = dir.path().join("note.png");
         std::fs::write(&path, b"\x89PNG\r\n\x1a\n").unwrap();
         let error = load_document(&path).unwrap_err();
-        assert!(error.contains("Markdown and plain text"));
+        assert!(error.contains("Markdown, plain text, and HTML"));
 
         let missing = load_document(&dir.path().join("missing.md")).unwrap_err();
         assert!(!missing.is_empty());
