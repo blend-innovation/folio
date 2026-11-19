@@ -60,11 +60,11 @@ jobs:
           path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
-      - name: Upload app
+      - name: Upload app archive
         uses: actions/upload-artifact@v4
         with:
-          name: folio-macos-app
-          path: target/universal-apple-darwin/release/bundle/macos/Folio.app
+          name: folio-macos-app-zip
+          path: target/universal-apple-darwin/release/Folio.app.zip
           if-no-files-found: error
 
       - name: Publish GitHub Release
