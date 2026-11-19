@@ -10,6 +10,7 @@ use folio_core::theme::ThemeSet;
 use folio_core::{render, DocumentMeta, RenderOptions};
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -52,6 +53,7 @@ pub struct DocumentPayload {
     pub meta: DocumentMeta,
     pub size: u64,
     pub modified_ms: u64,
+    pub source_hash: String,
     pub sample: bool,
 }
 
@@ -60,6 +62,35 @@ pub struct DocumentPayload {
 pub struct DefaultAppStatus {
     pub available: bool,
     pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Annotation {
+    pub id: String,
+    pub quote: String,
+    pub prefix: String,
+    pub suffix: String,
+    pub note: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AnnotationStore {
+    path: String,
+    source_hash: String,
+    annotations: Vec<Annotation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnnotationPayload {
+    pub source_hash: String,
+    pub source_changed: bool,
+    pub annotations: Vec<Annotation>,
+    pub cache_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -272,6 +303,11 @@ async fn open_file_dialog(app: AppHandle) -> Result<Option<DocumentPayload>, Str
 }
 
 #[tauri::command]
+fn stop_watching(app: AppHandle) {
+    *app.state::<AppState>().watcher.lock().unwrap() = None;
+}
+
+#[tauri::command]
 fn open_sample(app: AppHandle) -> Result<DocumentPayload, String> {
     // A sample is not watched; stop watching the previous document.
     *app.state::<AppState>().watcher.lock().unwrap() = None;
@@ -283,8 +319,108 @@ fn open_sample(app: AppHandle) -> Result<DocumentPayload, String> {
         meta: rendered.meta,
         size: SAMPLE_MARKDOWN.len() as u64,
         modified_ms: 0,
+        source_hash: content_hash(SAMPLE_MARKDOWN.as_bytes()),
         sample: true,
     })
+}
+
+#[tauri::command]
+fn load_annotations(app: AppHandle, path: String) -> Result<AnnotationPayload, String> {
+    let (path, cache_path) = annotation_target(&app, &path)?;
+    let source = read_source(&path)?;
+    let source_hash = content_hash(&source);
+    let store = read_annotation_store(&annotation_json_path(&app, &path)?);
+    let source_changed = !store.source_hash.is_empty() && store.source_hash != source_hash;
+    Ok(AnnotationPayload {
+        source_hash,
+        source_changed,
+        annotations: store.annotations,
+        cache_path: cache_path
+            .exists()
+            .then(|| cache_path.to_string_lossy().into_owned()),
+    })
+}
+
+#[tauri::command]
+fn save_annotations(
+    app: AppHandle,
+    path: String,
+    annotations: Vec<Annotation>,
+) -> Result<AnnotationPayload, String> {
+    validate_annotations(&annotations)?;
+    let (path, cache_path) = annotation_target(&app, &path)?;
+    let source = read_source(&path)?;
+    let source_hash = content_hash(&source);
+    let json_path = annotation_json_path(&app, &path)?;
+
+    if annotations.is_empty() {
+        let _ = std::fs::remove_file(&json_path);
+        let _ = std::fs::remove_file(&cache_path);
+        return Ok(AnnotationPayload {
+            source_hash,
+            source_changed: false,
+            annotations,
+            cache_path: None,
+        });
+    }
+
+    let store = AnnotationStore {
+        path: path.to_string_lossy().into_owned(),
+        source_hash: source_hash.clone(),
+        annotations: annotations.clone(),
+    };
+    let json = serde_json::to_vec_pretty(&store).map_err(|e| e.to_string())?;
+    write_atomic(&json_path, &json)?;
+    let annotated = annotated_markdown(&String::from_utf8_lossy(&source), &annotations);
+    write_atomic(&cache_path, annotated.as_bytes())?;
+
+    Ok(AnnotationPayload {
+        source_hash,
+        source_changed: false,
+        annotations,
+        cache_path: Some(cache_path.to_string_lossy().into_owned()),
+    })
+}
+
+#[tauri::command]
+async fn export_annotated(app: AppHandle, path: String) -> Result<Option<String>, String> {
+    let (path, _) = annotation_target(&app, &path)?;
+    let store = read_annotation_store(&annotation_json_path(&app, &path)?);
+    if store.annotations.is_empty() {
+        return Err("Add a note before exporting.".into());
+    }
+    let source = read_source(&path)?;
+    let markdown = annotated_markdown(&String::from_utf8_lossy(&source), &store.annotations);
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("document");
+    let selected = app
+        .dialog()
+        .file()
+        .add_filter("Markdown", &["md", "markdown"])
+        .set_file_name(format!("{stem}.annotated.md"))
+        .blocking_save_file();
+    let Some(file) = selected else {
+        return Ok(None);
+    };
+    let output = file.into_path().map_err(|e| e.to_string())?;
+    if output == path {
+        return Err("Choose a different file; the original is never modified.".into());
+    }
+    std::fs::write(&output, markdown).map_err(|e| format!("{}: {e}", output.display()))?;
+    Ok(Some(output.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+fn open_annotated_cache(app: AppHandle, path: String) -> Result<(), String> {
+    let (_, cache_path) = annotation_target(&app, &path)?;
+    if !cache_path.exists() {
+        return Err("No annotated copy has been saved yet.".into());
+    }
+    app.opener()
+        .open_path(cache_path.to_string_lossy(), None::<&str>)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -425,6 +561,7 @@ fn load_document(path: &Path) -> Result<DocumentPayload, String> {
         meta: rendered.meta,
         size: metadata.len(),
         modified_ms,
+        source_hash: content_hash(&bytes),
         sample: false,
     })
 }
@@ -644,6 +781,101 @@ fn load_config(path: &Path, themes: &ThemeCatalog) -> (AppConfig, Vec<String>) {
 }
 
 /* --------------------------------------------------------------------------
+Annotations
+-------------------------------------------------------------------------- */
+
+fn content_hash(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn annotation_target(app: &AppHandle, path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let path = std::fs::canonicalize(path).map_err(|e| format!("{path}: {e}"))?;
+    if !path.is_file() {
+        return Err("Annotations are only available for files.".into());
+    }
+    let directory = config_dir(app)?.join("annotations");
+    std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let key = content_hash(path.to_string_lossy().as_bytes());
+    let cache = directory.join(format!("{key}.annotated.md"));
+    Ok((path, cache))
+}
+
+fn annotation_json_path(app: &AppHandle, path: &Path) -> Result<PathBuf, String> {
+    let directory = config_dir(app)?.join("annotations");
+    std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let key = content_hash(path.to_string_lossy().as_bytes());
+    Ok(directory.join(format!("{key}.json")))
+}
+
+fn read_source(path: &Path) -> Result<Vec<u8>, String> {
+    let metadata = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if metadata.len() > MAX_DOCUMENT_BYTES {
+        return Err("That file is larger than 16 MB.".into());
+    }
+    std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn read_annotation_store(path: &Path) -> AnnotationStore {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let temp = path.with_extension("tmp");
+    std::fs::write(&temp, bytes).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::rename(&temp, path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn validate_annotations(annotations: &[Annotation]) -> Result<(), String> {
+    if annotations.len() > 500 {
+        return Err("A document can have at most 500 notes.".into());
+    }
+    for annotation in annotations {
+        if annotation.id.trim().is_empty()
+            || annotation.quote.trim().is_empty()
+            || annotation.note.trim().is_empty()
+        {
+            return Err("A note needs a quote and text.".into());
+        }
+        if annotation.id.len() > 120
+            || annotation.quote.len() > 8_000
+            || annotation.prefix.len() > 1_000
+            || annotation.suffix.len() > 1_000
+            || annotation.note.len() > 100_000
+        {
+            return Err("A note is too large to save.".into());
+        }
+    }
+    Ok(())
+}
+
+fn annotated_markdown(source: &str, annotations: &[Annotation]) -> String {
+    let mut out = source.to_string();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str("\n<!-- folio:annotations -->\n\n## Notes\n\n");
+    for (index, annotation) in annotations.iter().enumerate() {
+        out.push_str(&format!("### Note {}\n\n", index + 1));
+        for line in annotation.quote.lines() {
+            out.push_str("> ");
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push('\n');
+        out.push_str(annotation.note.trim());
+        out.push_str("\n\n");
+    }
+    out
+}
+
+/* --------------------------------------------------------------------------
 Recents
 -------------------------------------------------------------------------- */
 
@@ -750,6 +982,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<Wry>> {
         .build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&item(app, "home", "Home", Some("CmdOrCtrl+Shift+H"))?)
+        .separator()
         .item(&item(app, "open", "Open…", Some("CmdOrCtrl+O"))?)
         .item(&item(
             app,
@@ -820,6 +1054,7 @@ fn handle_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
     let action = match event.id().as_ref() {
         "settings" => "theme",
         "config" => "config",
+        "home" => "welcome",
         "open" => "open",
         "open-sample" => "open-sample",
         "reload" => "reload",
@@ -965,6 +1200,11 @@ pub fn run() {
             render_document,
             open_file_dialog,
             open_sample,
+            stop_watching,
+            load_annotations,
+            save_annotations,
+            export_annotated,
+            open_annotated_cache,
             read_image,
             open_external,
             open_path,
@@ -1262,6 +1502,41 @@ mod tests {
 
         let missing = load_document(&dir.path().join("missing.md")).unwrap_err();
         assert!(!missing.is_empty());
+    }
+
+    fn note(quote: &str, text: &str) -> Annotation {
+        Annotation {
+            id: "note-1".into(),
+            quote: quote.into(),
+            prefix: String::new(),
+            suffix: String::new(),
+            note: text.into(),
+            created_at: 1,
+            updated_at: 2,
+        }
+    }
+
+    #[test]
+    fn content_hashes_change_with_the_source() {
+        assert_eq!(content_hash(b"same"), content_hash(b"same"));
+        assert_ne!(content_hash(b"same"), content_hash(b"different"));
+    }
+
+    #[test]
+    fn annotated_markdown_preserves_the_original_and_appends_notes() {
+        let source = "# A document\n\nOriginal body.\n";
+        let output = annotated_markdown(source, &[note("Original body.", "Remember this.")]);
+        assert!(output.starts_with(source));
+        assert!(output.contains("## Notes"));
+        assert!(output.contains("> Original body."));
+        assert!(output.contains("Remember this."));
+    }
+
+    #[test]
+    fn annotation_validation_rejects_empty_notes() {
+        assert!(validate_annotations(&[note("", "text")]).is_err());
+        assert!(validate_annotations(&[note("quote", "")]).is_err());
+        assert!(validate_annotations(&[note("quote", "text")]).is_ok());
     }
 
     #[test]

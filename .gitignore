@@ -13,3 +13,6 @@ bench/corpus/
 
 # Local build-check sysroot and pkg-config stubs
 .tools/
+
+# Local Pi Web attachments
+.pi-web/

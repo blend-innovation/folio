@@ -7,6 +7,7 @@ import {
   openDocumentPath,
 } from "./bridge";
 import { FindController } from "./find";
+import { NotesController } from "./notes";
 import { OutlineController, scrollToId } from "./outline";
 import { mountPreview } from "./preview-frame";
 performance.mark("folio:module-start");
@@ -34,6 +35,7 @@ const app = $<HTMLDivElement>("app");
 const progressBar = $<HTMLElement>("progress-bar");
 const railScrim = $<HTMLElement>("rail-scrim");
 const railToggle = $<HTMLButtonElement>("rail-toggle");
+const homeButton = $<HTMLButtonElement>("home-btn");
 const railClose = $<HTMLButtonElement>("rail-close");
 const outlineList = $<HTMLOListElement>("outline");
 const outlineEmpty = $<HTMLElement>("outline-empty");
@@ -140,6 +142,17 @@ const finder = new FindController({
   },
 });
 
+const notes = new NotesController({
+  root: docElement,
+  scroll: scrollElement,
+  onOpen: () => {
+    setThemePanel(false);
+    finder.close();
+  },
+  onError: (error) => showToast(errorText(error)),
+  onToast: showToast,
+});
+
 /* --------------------------------------------------------------------------
    Boot
    -------------------------------------------------------------------------- */
@@ -231,6 +244,7 @@ function installWindowDrag(): void {
 function installEventListeners(): void {
   installWindowDrag();
   railToggle.addEventListener("click", () => runAction("toggle-outline"));
+  homeButton.addEventListener("click", () => runAction("welcome"));
   railClose.addEventListener("click", closeRail);
   railScrim.addEventListener("click", closeRail);
   openButton.addEventListener("click", openFile);
@@ -543,6 +557,7 @@ function persistPreferences(): void {
 }
 
 function setThemePanel(open: boolean): void {
+  if (open) notes.close();
   const wasOpen = !themePanel.hidden;
   themePanel.hidden = !open;
   themeTrigger.setAttribute("aria-expanded", String(open));
@@ -628,6 +643,7 @@ function renderDocument(
       : null;
 
   state.document = payload;
+  homeButton.hidden = false;
   const token = ++state.renderToken;
 
   app.dataset.state = "doc";
@@ -645,6 +661,7 @@ function renderDocument(
   performance.mark("folio:decorate-complete");
   enhanceCode();
   performance.mark("folio:enhance-complete");
+  notes.setDocument(payload);
   updateChrome(payload);
   updateFindAvailability();
   outline.render(payload.meta.outline);
@@ -813,7 +830,10 @@ function handleDefaultPromptKeys(event: KeyboardEvent): void {
 
 function showWelcome(): void {
   state.document = null;
+  homeButton.hidden = true;
   app.dataset.state = "welcome";
+  notes.clear();
+  if (hasTauri()) invoke("stop_watching").catch(() => {});
   codeObserver?.disconnect();
   codeObserver = null;
   closeDefaultPrompt();
@@ -1497,6 +1517,7 @@ function setTextScale(scale: number): void {
 function handleKeyboard(event: KeyboardEvent): void {
   if (!defaultPrompt.hidden) return;
   if (event.key === "Escape") {
+    if (notes.handleEscape()) return;
     if (!themePanel.hidden) {
       setThemePanel(false);
       return;

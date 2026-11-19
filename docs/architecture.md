@@ -84,6 +84,7 @@ The UI relies on the renderer's markup:
 | `.code-block[data-lang]` | Header, language label, copy button, scrollable `pre`. |
 | `.code-block[data-lang="html"]` | The UI adds sandboxed **Preview** and native **Open** actions. |
 | `.code-block[data-lang="mermaid"]` | The UI replaces the source with a rendered diagram and a Source toggle. |
+| `mark.note-mark[data-note-id]` | A restored annotation highlight. Notes and their source hashes live in a sidecar. |
 | `.callout[data-kind]` | GFM alert. |
 | `.document` figures: `figure.doc-figure > img + figcaption` | Standalone image. |
 | `img[data-local-image]` | Local image the host should read and inline. |
@@ -137,7 +138,7 @@ See `crates/folio-core/tests/render.rs` for the XSS regression suite.
 
 ## IPC contract
 
-The webview talks to the shell through sixteen commands and a handful of events.
+The webview talks to the shell through twenty-one commands and a handful of events.
 
 | Command | Result |
 | --- | --- |
@@ -145,6 +146,11 @@ The webview talks to the shell through sixteen commands and a handful of events.
 | `render_document { path }` | `DocumentPayload` for a file; starts the watcher and records the recent. |
 | `open_file_dialog` | Shows the native picker; renders the selected file or returns `null`. |
 | `open_sample` | Renders the bundled sample document without a watcher. |
+| `stop_watching` | Stops live reload when returning to Home. |
+| `load_annotations { path }` | Current source hash, change flag, sidecar notes, and cached-copy path. |
+| `save_annotations { path, annotations }` | Validates/writes the sidecar and annotated cache. |
+| `export_annotated { path }` | Saves an annotated Markdown copy via a native save dialog. |
+| `open_annotated_cache { path }` | Opens the generated annotated copy. |
 | `read_image { path }` | A raster image as a `data:` URL, or an error. |
 | `open_external { url }` | Hands an allowed URL to the OS. |
 | `open_path { path }` | Opens a local file in its default app. |
@@ -260,6 +266,16 @@ folio themes scaffold ID
 This is how the end-to-end fixtures are generated, and it keeps the engine
 usable without the app.
 
+## Annotations
+
+Annotations are stored outside the document. A sidecar keyed by the canonical
+path contains the notes and the source SHA-256 they were made against; a
+second cached file contains the exported annotated Markdown. The original file
+is never written. Loading a document compares the stored hash with the current
+source and warns when they differ. Anchors are quotes plus limited surrounding
+context; unmatched notes stay in the panel as stale rather than attaching to
+unrelated text. The exporter refuses to overwrite the source path.
+
 ## Configuration
 
 `config.toml` lives beside the themes folder and is loaded once during setup,
@@ -290,7 +306,7 @@ security boundaries, and explicit non-goals.
 | `folio-core` unit tests | escaping, slugs, frontmatter, path classification, theme validation, highlighter families |
 | `folio-core` integration | headings, callouts, tables, tasks, figures, footnotes, links, raw HTML, XSS, stats, Unicode, CRLF |
 | `folio-cli` integration | stdout, JSON, `--out`, stdin, errors, theme listing/scaffolding |
-| `folio-app` unit | image sniffing, path handling, preview titles, configuration parsing |
-| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, configuration pinning, find, clipboard, text size, default-app prompt, responsive rail, HTML preview, Mermaid rendering/theme refresh, axe, large-document timing |
+| `folio-app` unit | image sniffing, path handling, preview titles, configuration parsing, annotation Markdown/hash validation |
+| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, configuration pinning, Home, notes, find, clipboard, text size, default-app prompt, responsive rail, HTML preview, Mermaid rendering/theme refresh, axe, large-document timing |
 | criterion | render and highlight throughput across 8 KB/100 KB/1 MB plus no-highlight |
 | `bench/run.mjs` | release CLI wall clock and HTML growth, including process startup |

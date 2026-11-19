@@ -33,7 +33,10 @@ and gives it a page.
   to become your default `.md` app — Yes, No, or Never show again.
 - **A real reading interface.** Sticky contents rail with scroll spy, reading
   progress, find, adjustable text size, code copy, collapsible long snippets,
-  and a native menu.
+  a Home button, and a native menu.
+- **Marginalia without touching the source.** Select text, add a note, and keep
+  the original Markdown untouched. Notes live in a sidecar, detect when the
+  original changed, and can be exported or opened as a cached annotated copy.
 - **A configuration file, not a settings maze.** Pin a theme, system matching,
   text size, and rail visibility in `config.toml`. Open it from the app menu or
   the theme picker; in-app controls keep working when a value is not pinned.
@@ -54,8 +57,8 @@ and gives it a page.
   previews are opt-in, parsed inertly, and isolated in a sandboxed iframe with
   scripts and network access disabled. URLs are classified and sanitised.
   Theme values are validated before they become CSS.
-- **Small by default.** The reader UI is roughly 33 KB of JavaScript and 37 KB
-  of CSS (minified, before gzip); fonts are local. Mermaid adds ~3.3 MB of lazy
+- **Small by default.** The reader UI is roughly 43 KB of JavaScript and 40 KB
+  of CSS (minified, before gzip); fonts are local. Mermaid adds ~3.6 MB of lazy
   assets that are only fetched when a document contains a diagram. The native
   shell is a single Rust binary using the system WebView, not a bundled
   browser. The release shell binary measured 7.5 MB on the Linux validation
@@ -194,9 +197,10 @@ per-diagram Mermaid frontmatter or `init` config is ignored.
 
 ### Your data
 
-Folio stores only preferences, recent-file paths, window state, themes, and an
-optional `config.toml` in `~/Library/Application Support/com.folio.reader`. It
-does not copy, upload, or index your documents. The only network requests are remote images referenced by
+Folio stores preferences, recent-file paths, window state, themes, an optional
+`config.toml`, and annotation sidecars/caches in
+`~/Library/Application Support/com.folio.reader`. It does not copy, upload, or
+index your documents. The only network requests are remote images referenced by
 a document and links you choose to open.
 
 ## Themes
@@ -247,6 +251,19 @@ file is validated before it is applied and is never executed. Restart Folio
 after editing. The full precedence rules, examples, and validation behavior are
 in [docs/configuration.md](docs/configuration.md).
 
+## Home and notes
+
+Use the Home button in the topbar or **File → Home** (`⌘⇧H`) to return to the
+welcome page. Folio stops watching the document while you are home; choosing a
+recent reopens it and restarts live reload.
+
+Select text in a document and choose **Add note** to leave a note. The original
+Markdown is never modified. Notes and an automatically cached annotated copy
+live in Folio's application data directory; the Notes panel can export a new
+`<name>.annotated.md` or open the cached copy. When the source changes, Folio
+warns and re-anchors notes by their quoted text, marking anything it cannot
+match. Details are in [docs/annotations.md](docs/annotations.md).
+
 ## Extending Folio
 
 Folio does not ship a plugin runtime. Extensions start with themes and are
@@ -285,13 +302,21 @@ The UI bundle is intentionally small:
 
 | Asset | Minified | Gzip |
 | --- | ---: | ---: |
-| JavaScript | 33 KB | 10.7 KB |
-| CSS | 37 KB | 8.2 KB |
+| JavaScript | 43 KB | 13.4 KB |
+| CSS | 40 KB | 8.8 KB |
 | Fonts (local WOFF2, Latin + Latin-ext) | ~500 KB | — |
-| Mermaid (lazy, only when diagrams appear) | ~3.3 MB | — |
+| Mermaid (lazy, only when diagrams appear) | ~3.6 MB | — |
 
 The macOS app does not bundle a browser engine; it uses the WebView already on
 the system. Mermaid is not requested at launch.
+
+### Downloads
+
+Published releases attach the DMG (`Folio_*.dmg`) and `Folio.app.zip`. The
+**Source code** archives GitHub generates for every tag are source only, not
+applications. Actions artifacts are temporary; use the DMG or app zip from a
+release for a permanent download. The direct Actions artifacts are also
+available from the workflow run page and expire automatically.
 
 The end-to-end suite needs a local Chrome (set `CHROME_BIN` if it is not in a
 standard location). On macOS, Folio can also be measured by building the `.app`

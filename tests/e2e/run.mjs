@@ -458,6 +458,76 @@ await test("HTML and Mermaid snippets can be previewed", async () => {
   await a11y("previews");
 });
 
+await test("home returns to welcome and can reopen a document", async () => {
+  await openSample();
+  await page.click("#home-btn");
+  const home = await page.evaluate(() => ({
+    state: document.getElementById("app").dataset.state,
+    welcomeHidden: document.getElementById("welcome").hidden,
+    homeHidden: document.getElementById("home-btn").hidden,
+    findDisabled: document.getElementById("find-btn").disabled,
+  }));
+  assert.equal(home.state, "welcome");
+  assert.equal(home.welcomeHidden, false);
+  assert.equal(home.homeHidden, true);
+  assert.equal(home.findDisabled, true);
+  await page.click("#welcome-sample");
+  assert.equal(await page.$eval("#app", (node) => node.dataset.state), "doc");
+  assert.equal(await page.$eval("#home-btn", (node) => node.hidden), false);
+});
+
+await test("notes can be added without changing the source document", async () => {
+  await reset();
+  await openApp(page, server.url);
+  const features = JSON.parse(
+    await readFile(join(ROOT, "ui/dist/fixtures/features.json"), "utf8"),
+  );
+  await page.evaluate(
+    (payload) => window.__folio.render({ ...payload, sample: false }),
+    features,
+  );
+  await page.waitForFunction(
+    () => !document.getElementById("notes-btn").disabled,
+  );
+
+  const selected = await page.evaluate(() => {
+    const doc = document.getElementById("doc");
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node && !node.data.includes("Preview features")) {
+      node = walker.nextNode();
+    }
+    if (!node) return null;
+    const start = node.data.indexOf("Preview features");
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + "Preview features".length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    doc.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    return selection.toString();
+  });
+  assert.equal(selected, "Preview features");
+  await page.waitForSelector("#note-fab:not([hidden])");
+  await page.click("#note-fab");
+  await page.waitForSelector("#note-composer:not([hidden])");
+  await page.type("#note-text", "This is a reader note.");
+  await page.click("#note-save");
+  await page.waitForSelector(".note-mark");
+  const note = await page.evaluate(() => ({
+    mark: document.querySelector(".note-mark")?.textContent,
+    list: document.getElementById("notes-list")?.textContent ?? "",
+    count: document.getElementById("notes-count")?.textContent,
+    docText: document.getElementById("doc")?.textContent ?? "",
+  }));
+  assert.equal(note.mark, "Preview features");
+  assert.match(note.list, /This is a reader note/);
+  assert.match(note.count, /1 note/);
+  assert.match(note.docText, /Preview features/);
+  await a11y("notes");
+});
+
 await test("configuration pins theme, text size, and rail visibility", async () => {
   await reset();
   const base = JSON.parse(

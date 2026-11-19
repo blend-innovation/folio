@@ -34,7 +34,25 @@ export interface DocumentPayload {
   meta: DocumentMeta;
   size: number;
   modifiedMs: number;
+  sourceHash?: string;
   sample: boolean;
+}
+
+export interface Annotation {
+  id: string;
+  quote: string;
+  prefix: string;
+  suffix: string;
+  note: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AnnotationPayload {
+  sourceHash: string;
+  sourceChanged: boolean;
+  annotations: Annotation[];
+  cachePath: string | null;
 }
 
 export type Appearance = "light" | "dark";
