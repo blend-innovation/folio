@@ -543,11 +543,12 @@
 
 .code-copy,
 .code-action {
+  min-height: var(--control-height-sm);
   padding: 4px 7px;
   border-radius: 5px;
   color: var(--f-subtle);
   font-family: var(--f-font-body);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.08em;
   line-height: 1;

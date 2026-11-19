@@ -51,7 +51,26 @@ export async function invoke<T>(
     case "open_path":
     case "show_window":
     case "set_title":
+    case "open_config":
+    case "stop_watching":
+    case "open_annotated_cache":
       return undefined as unknown as T;
+    case "load_annotations":
+      return {
+        sourceHash: "",
+        sourceChanged: false,
+        annotations: [],
+        cachePath: null,
+      } as unknown as T;
+    case "save_annotations":
+      return {
+        sourceHash: "",
+        sourceChanged: false,
+        annotations: (args?.annotations as unknown[]) ?? [],
+        cachePath: "annotations/preview.annotated.md",
+      } as unknown as T;
+    case "export_annotated":
+      return null as unknown as T;
     case "markdown_default_status":
       return { available: false, isDefault: false } as unknown as T;
     case "set_markdown_default":

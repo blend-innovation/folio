@@ -114,9 +114,11 @@
             <span class="doc-path" id="doc-path">A quiet reader for Markdown</span>
           </div>
           <div class="doc-stats" id="doc-stats"></div>
+          <span class="topbar-divider" aria-hidden="true"></span>
           <div class="topbar-actions">
             <button class="icon-btn notes-btn" id="notes-btn" aria-label="Notes" aria-expanded="false" title="Notes">
               <svg class="icon"><use href="#i-note" /></svg>
+              <span class="notes-badge" id="notes-badge" aria-hidden="true" hidden></span>
             </button>
             <button class="icon-btn" id="find-btn" aria-label="Find in document" title="Find (⌘F)">
               <svg class="icon"><use href="#i-search" /></svg>
@@ -184,7 +186,7 @@
         <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
       </main>
 
-      <aside class="notes-panel" id="notes-panel" role="dialog" aria-label="Notes" hidden>
+      <aside class="notes-panel" id="notes-panel" aria-label="Notes" tabindex="-1" hidden>
         <header class="notes-head">
           <div>
             <p class="eyebrow">Notes</p>
@@ -195,10 +197,12 @@
           </button>
         </header>
 
-        <p class="notes-warning" id="notes-warning" hidden></p>
+        <p class="notes-warning" id="notes-warning" role="status" hidden></p>
+        <p class="notes-loading" id="notes-loading" hidden>Loading notes…</p>
         <div class="notes-list" id="notes-list"></div>
         <p class="notes-empty" id="notes-empty">
-          Select text in the document, then add a note. The Markdown file stays untouched.
+          <span class="notes-empty-title">Select text to add a note</span>
+          <span>Notes stay beside the document. The Markdown file is untouched.</span>
         </p>
 
         <div class="note-composer" id="note-composer" hidden>
@@ -212,11 +216,15 @@
         </div>
 
         <footer class="notes-actions">
-          <button class="notes-action" id="notes-export" type="button">Export annotated markdown</button>
-          <button class="notes-action" id="notes-cache" type="button">Open cached copy</button>
+          <button class="notes-action notes-action-primary" id="notes-export" type="button">Export notes</button>
+          <button class="notes-action" id="notes-cache" type="button">Open annotated copy</button>
         </footer>
       </aside>
-      <button class="annotate-fab" id="note-fab" type="button" hidden>Add note</button>
+      <div class="selection-toolbar" id="selection-toolbar" role="toolbar" aria-label="Selection actions" hidden>
+        <button class="selection-action" id="selection-copy" type="button">Copy</button>
+        <span class="selection-divider" aria-hidden="true"></span>
+        <button class="selection-action selection-note" id="selection-note" type="button">Note</button>
+      </div>
 
       <div class="drop-overlay" id="drop-overlay" hidden>
         <div class="drop-card">

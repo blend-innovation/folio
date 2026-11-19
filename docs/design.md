@@ -47,6 +47,12 @@ accent feel intentional.
   theme-coloured figure with a **Source** toggle. The diagram is rendered only
   when it approaches the viewport; it should feel like a figure in the page,
   not an embedded application.
+- **Notes are marginalia, not a dashboard.** A selection brings up a small
+  `Copy / Note` toolbar. Notes sit in a quiet inspector that starts below the
+  topbar on desktop and becomes a bottom sheet on narrow windows. Quotes use
+  the display face, actions are text-sized controls, and the active note is
+  marked in both the panel and the page. Source change and unmatched quotes are
+  status language, not alerts.
 - **Tables are comparisons.** A single outer card, a muted header row, no
   vertical rules, right-aligned numerals.
 - **Callouts are margin notes with weight.** A tinted surface and a 3 px accent

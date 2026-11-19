@@ -17,6 +17,7 @@ interface NotesOptions {
   onOpen: () => void;
   onError: (error: unknown) => void;
   onToast: (message: string) => void;
+  onCopy: (text: string) => Promise<void>;
 }
 
 const TEXT_NODE = 3;
@@ -50,7 +51,11 @@ export class NotesController {
   private readonly textarea = element<HTMLTextAreaElement>("note-text");
   private readonly saveButton = element<HTMLButtonElement>("note-save");
   private readonly cancelButton = element<HTMLButtonElement>("note-cancel");
-  private readonly fab = element<HTMLButtonElement>("note-fab");
+  private readonly toolbar = element<HTMLElement>("selection-toolbar");
+  private readonly copyButton = element<HTMLButtonElement>("selection-copy");
+  private readonly noteButton = element<HTMLButtonElement>("selection-note");
+  private readonly badge = element<HTMLElement>("notes-badge");
+  private readonly loading = element<HTMLElement>("notes-loading");
   private readonly exportButton = element<HTMLButtonElement>("notes-export");
   private readonly cacheButton = element<HTMLButtonElement>("notes-cache");
 
@@ -65,6 +70,8 @@ export class NotesController {
   private loadToken = 0;
   private saveToken = 0;
   private opened = false;
+  private isLoading = false;
+  private activeId: string | null = null;
 
   constructor(options: NotesOptions) {
     this.root = options.root;
@@ -73,20 +80,21 @@ export class NotesController {
 
     this.button.addEventListener("click", () => this.toggle());
     this.closeButton.addEventListener("click", () => this.close());
-    this.fab.addEventListener("mousedown", (event) => event.preventDefault());
-    this.fab.addEventListener("click", () => this.startFromSelection());
+    this.toolbar.addEventListener("mousedown", (event) => event.preventDefault());
+    this.copyButton.addEventListener("click", () => this.copySelection());
+    this.noteButton.addEventListener("click", () => this.startFromSelection());
     this.saveButton.addEventListener("click", () => this.saveComposer());
     this.cancelButton.addEventListener("click", () => this.cancelComposer());
     this.exportButton.addEventListener("click", () => void this.export());
     this.cacheButton.addEventListener("click", () => void this.openCache());
     this.root.addEventListener("mouseup", (event) => this.onMouseUp(event));
     this.root.addEventListener("click", (event) => this.onMarkClick(event));
-    this.scroll.addEventListener("scroll", () => this.hideFab(), {
+    this.scroll.addEventListener("scroll", () => this.hideToolbar(), {
       passive: true,
     });
-    window.addEventListener("resize", () => this.hideFab());
+    window.addEventListener("resize", () => this.hideToolbar());
     document.addEventListener("selectionchange", () => {
-      if (!window.getSelection()?.toString().trim()) this.hideFab();
+      if (!window.getSelection()?.toString().trim()) this.hideToolbar();
     });
 
     this.setEnabled(false);
@@ -106,9 +114,11 @@ export class NotesController {
     this.stale.clear();
     this.pending = null;
     this.editingId = null;
+    this.activeId = null;
     this.composer.hidden = true;
-    this.hideFab();
+    this.hideToolbar();
     this.setEnabled(true);
+    this.isLoading = true;
     this.render();
     this.applyHighlights();
 
@@ -126,6 +136,8 @@ export class NotesController {
     this.stale.clear();
     this.pending = null;
     this.editingId = null;
+    this.activeId = null;
+    this.isLoading = false;
     this.composer.hidden = true;
     this.close();
     this.setEnabled(false);
@@ -142,7 +154,7 @@ export class NotesController {
       this.close();
       return true;
     }
-    this.hideFab();
+    this.hideToolbar();
     return false;
   }
 
@@ -167,14 +179,16 @@ export class NotesController {
     this.button.setAttribute("aria-expanded", "true");
     this.options.onOpen();
     this.render();
-    this.closeButton.focus({ preventScroll: true });
+    this.panel.focus({ preventScroll: true });
   }
 
   close(): void {
+    const wasOpen = this.opened;
     this.opened = false;
     this.panel.hidden = true;
     this.button.setAttribute("aria-expanded", "false");
-    this.hideFab();
+    this.hideToolbar();
+    if (wasOpen && this.document) this.button.focus({ preventScroll: true });
   }
 
   private async load(path: string, token: number): Promise<void> {
@@ -187,10 +201,15 @@ export class NotesController {
       this.sourceHash = payload.sourceHash || this.sourceHash;
       this.sourceChanged = Boolean(payload.sourceChanged);
       this.cachePath = payload.cachePath;
+      this.isLoading = false;
       this.applyHighlights();
       this.render();
     } catch (error) {
-      if (token === this.loadToken) this.options.onError(error);
+      if (token === this.loadToken) {
+        this.isLoading = false;
+        this.render();
+        this.options.onError(error);
+      }
     }
   }
 
@@ -222,22 +241,45 @@ export class NotesController {
     const count = this.annotations.length;
     this.count.textContent =
       count === 0 ? "No notes yet" : `${count} note${count === 1 ? "" : "s"}`;
+    this.badge.hidden = count === 0;
     this.button.title = count > 0 ? `Notes (${count})` : "Notes";
     this.button.setAttribute(
       "aria-label",
       count > 0 ? `Notes (${count})` : "Notes",
     );
+    this.exportButton.title = count
+      ? "Export the original plus your notes"
+      : "Add a note first";
+    this.cacheButton.title =
+      count === 0
+        ? "Add a note first"
+        : this.cachePath
+          ? "Open the cached annotated copy"
+          : "A cached copy is written when notes are saved";
 
+    if (this.isLoading) {
+      this.loading.hidden = false;
+      this.list.hidden = true;
+      this.empty.hidden = true;
+      this.warning.hidden = true;
+      this.exportButton.disabled = true;
+      this.cacheButton.disabled = true;
+      return;
+    }
+
+    this.loading.hidden = true;
+    this.list.hidden = false;
     const missing = this.stale.size;
     if (count === 0) {
       this.warning.hidden = true;
     } else if (this.sourceChanged) {
       this.warning.hidden = false;
-      this.warning.textContent =
-        "The original changed since these notes were saved. Notes remain where their quote can still be found.";
+      this.warning.textContent = missing
+        ? `Source changed since these notes were saved. ${missing} note${missing === 1 ? "" : "s"} kept without a highlight.`
+        : "Source changed since these notes were saved.";
     } else if (missing > 0) {
       this.warning.hidden = false;
-      this.warning.textContent = `${missing} note${missing === 1 ? "" : "s"} could not be re-anchored in the current document.`;
+      this.warning.textContent = `${missing} quoted passage${missing === 1 ? " has" : "s have"} changed. The note${missing === 1 ? " is" : "s are"} kept, but highlighted text could not be restored.`;
     } else {
       this.warning.hidden = true;
     }
@@ -246,6 +288,7 @@ export class NotesController {
     for (const annotation of this.annotations) {
       const item = document.createElement("article");
       item.className = "note-item";
+      item.dataset.noteId = annotation.id;
 
       const quote = document.createElement("button");
       quote.type = "button";
@@ -266,7 +309,7 @@ export class NotesController {
       if (this.stale.has(annotation.id)) {
         const stale = document.createElement("span");
         stale.className = "note-stale";
-        stale.textContent = "Not found";
+        stale.textContent = "Quote changed";
         meta.append(stale);
       }
 
@@ -285,6 +328,7 @@ export class NotesController {
         this.annotations = this.annotations.filter(
           (item) => item.id !== annotation.id,
         );
+        if (this.activeId === annotation.id) this.activeId = null;
         this.applyHighlights();
         this.render();
         void this.persist();
@@ -295,9 +339,19 @@ export class NotesController {
       this.list.append(item);
     }
 
-    this.empty.hidden = count > 0;
+    this.empty.hidden = count > 0 || !this.composer.hidden;
     this.exportButton.disabled = count === 0;
     this.cacheButton.disabled = count === 0 || !this.cachePath;
+    this.updateActive();
+  }
+
+  private updateActive(): void {
+    for (const item of this.list.querySelectorAll<HTMLElement>(".note-item")) {
+      item.classList.toggle("is-active", item.dataset.noteId === this.activeId);
+    }
+    for (const mark of this.root.querySelectorAll<HTMLElement>("mark.note-mark")) {
+      mark.classList.toggle("is-active", mark.dataset.noteId === this.activeId);
+    }
   }
 
   private applyHighlights(): void {
@@ -371,11 +425,16 @@ export class NotesController {
   }
 
   private focusAnnotation(id: string): void {
+    this.activeId = id;
+    this.updateActive();
     const mark = Array.from(
       this.root.querySelectorAll<HTMLElement>("mark.note-mark"),
     ).find((node) => node.dataset.noteId === id);
-    if (!mark) return;
-    mark.scrollIntoView({ block: "center", behavior: "smooth" });
+    mark?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const item = Array.from(
+      this.list.querySelectorAll<HTMLElement>(".note-item"),
+    ).find((node) => node.dataset.noteId === id);
+    item?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
   private onMarkClick(event: MouseEvent): void {
@@ -389,26 +448,26 @@ export class NotesController {
     event.preventDefault();
     event.stopPropagation();
     this.open();
-    this.openComposer(note);
+    this.focusAnnotation(note.id);
   }
 
   private onMouseUp(event: MouseEvent): void {
     if (!this.document) return;
     const target = event.target as Element | null;
-    if (target?.closest(".note-mark")) return;
+    if (target?.closest("mark.note-mark")) return;
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      this.hideFab();
+      this.hideToolbar();
       return;
     }
     const range = selection.getRangeAt(0);
     if (!this.root.contains(range.commonAncestorContainer)) {
-      this.hideFab();
+      this.hideToolbar();
       return;
     }
     const quote = range.toString().trim();
     if (!quote || quote.length > 8_000) {
-      this.hideFab();
+      this.hideToolbar();
       return;
     }
 
@@ -425,24 +484,34 @@ export class NotesController {
 
     this.pending = { quote, prefix, suffix };
     const rect = range.getBoundingClientRect();
-    const left = Math.max(70, Math.min(window.innerWidth - 70, rect.left + rect.width / 2));
+    const left = Math.max(
+      82,
+      Math.min(window.innerWidth - 82, rect.left + rect.width / 2),
+    );
     const top =
-      rect.bottom + 10 < window.innerHeight - 40
+      rect.bottom + 10 < window.innerHeight - 44
         ? rect.bottom + 10
-        : Math.max(8, rect.top - 38);
-    this.fab.style.left = `${left}px`;
-    this.fab.style.top = `${top}px`;
-    this.fab.hidden = false;
+        : Math.max(8, rect.top - 40);
+    this.toolbar.style.left = `${left}px`;
+    this.toolbar.style.top = `${top}px`;
+    this.toolbar.hidden = false;
   }
 
-  private hideFab(): void {
-    this.fab.hidden = true;
+  private hideToolbar(): void {
+    this.toolbar.hidden = true;
+  }
+
+  private copySelection(): void {
+    const selection = this.pending;
+    if (!selection) return;
+    this.hideToolbar();
+    void this.options.onCopy(selection.quote);
   }
 
   private startFromSelection(): void {
     const selection = this.pending;
     if (!selection) return;
-    this.hideFab();
+    this.hideToolbar();
     this.open();
     this.openComposer(undefined, selection);
   }
@@ -452,6 +521,7 @@ export class NotesController {
     if (!quote) return;
     this.pending = annotation ? null : selection ?? null;
     this.editingId = annotation?.id ?? null;
+    if (annotation) this.activeId = annotation.id;
     this.quoteEl.textContent =
       quote.length > 420 ? `${quote.slice(0, 420)}…` : quote;
     this.textarea.value = annotation?.note ?? "";
@@ -476,10 +546,11 @@ export class NotesController {
     if (editing) {
       editing.note = text;
       editing.updatedAt = now;
+      this.activeId = editing.id;
     } else {
       const pending = this.pending;
       if (!pending) return;
-      this.annotations.push({
+      const annotation: Annotation = {
         id: newId(),
         quote: pending.quote,
         prefix: pending.prefix,
@@ -487,7 +558,9 @@ export class NotesController {
         note: text,
         createdAt: now,
         updatedAt: now,
-      });
+      };
+      this.annotations.push(annotation);
+      this.activeId = annotation.id;
     }
 
     this.cancelComposer();
@@ -512,7 +585,7 @@ export class NotesController {
       const output = await invoke<string | null>("export_annotated", {
         path: this.document.path,
       });
-      if (output) this.options.onToast("Annotated Markdown exported.");
+      if (output) this.options.onToast("Notes exported.");
     } catch (error) {
       this.options.onError(error);
     }

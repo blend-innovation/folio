@@ -509,8 +509,12 @@ await test("notes can be added without changing the source document", async () =
     return selection.toString();
   });
   assert.equal(selected, "Preview features");
-  await page.waitForSelector("#note-fab:not([hidden])");
-  await page.click("#note-fab");
+  await page.waitForSelector("#selection-toolbar:not([hidden])");
+  assert.deepEqual(
+    await page.$$eval("#selection-toolbar button", (nodes) => nodes.map((node) => node.textContent)),
+    ["Copy", "Note"],
+  );
+  await page.click("#selection-note");
   await page.waitForSelector("#note-composer:not([hidden])");
   await page.type("#note-text", "This is a reader note.");
   await page.click("#note-save");
@@ -525,6 +529,17 @@ await test("notes can be added without changing the source document", async () =
   assert.match(note.list, /This is a reader note/);
   assert.match(note.count, /1 note/);
   assert.match(note.docText, /Preview features/);
+  assert.equal(await page.$eval("#notes-badge", (node) => node.hidden), false);
+
+  await page.click(".note-mark");
+  assert.equal(
+    await page.$eval("#notes-panel", (node) => node.hidden),
+    false,
+  );
+  assert.equal(
+    await page.$eval(".note-item", (node) => node.classList.contains("is-active")),
+    true,
+  );
   await a11y("notes");
 });
 

@@ -97,11 +97,11 @@ The outline for a 1,100-section document is built in about 10 ms.
 
 | Asset | Raw | Gzip |
 | --- | ---: | ---: |
-| `app.js` (minified ES module) | 43 KB | 13.4 KB |
-| `app.css` (minified, all themes) | 40 KB | 8.8 KB |
+| `app.js` (minified ES module) | 45 KB | 13.9 KB |
+| `app.css` (minified, all themes) | 43 KB | 9.2 KB |
 | `preview.js` (separate preview window) | 1 KB | — |
 | Manrope + Newsreader WOFF2 subsets | 504 KB | — |
-| Reader assets before app binary | ~0.6 MB | ~22.2 KB JS+CSS |
+| Reader assets before app binary | ~0.6 MB | ~23.1 KB JS+CSS |
 | Mermaid lazy assets (on demand) | ~3.6 MB | — |
 | Release shell binary (Linux measurement) | 7.5 MB | — |
 | Native webview | system WKWebView | — |

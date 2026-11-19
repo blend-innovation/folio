@@ -148,9 +148,18 @@ const notes = new NotesController({
   onOpen: () => {
     setThemePanel(false);
     finder.close();
+    if (narrowQuery.matches) closeRail();
   },
   onError: (error) => showToast(errorText(error)),
   onToast: showToast,
+  onCopy: async (text) => {
+    try {
+      await copyText(text);
+      showToast("Selection copied.");
+    } catch {
+      showToast("Could not copy the selection.");
+    }
+  },
 });
 
 /* --------------------------------------------------------------------------

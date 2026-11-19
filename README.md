@@ -57,7 +57,7 @@ and gives it a page.
   previews are opt-in, parsed inertly, and isolated in a sandboxed iframe with
   scripts and network access disabled. URLs are classified and sanitised.
   Theme values are validated before they become CSS.
-- **Small by default.** The reader UI is roughly 43 KB of JavaScript and 40 KB
+- **Small by default.** The reader UI is roughly 45 KB of JavaScript and 43 KB
   of CSS (minified, before gzip); fonts are local. Mermaid adds ~3.6 MB of lazy
   assets that are only fetched when a document contains a diagram. The native
   shell is a single Rust binary using the system WebView, not a bundled
@@ -257,12 +257,14 @@ Use the Home button in the topbar or **File → Home** (`⌘⇧H`) to return to 
 welcome page. Folio stops watching the document while you are home; choosing a
 recent reopens it and restarts live reload.
 
-Select text in a document and choose **Add note** to leave a note. The original
-Markdown is never modified. Notes and an automatically cached annotated copy
-live in Folio's application data directory; the Notes panel can export a new
-`<name>.annotated.md` or open the cached copy. When the source changes, Folio
-warns and re-anchors notes by their quoted text, marking anything it cannot
-match. Details are in [docs/annotations.md](docs/annotations.md).
+Select text in a document and choose **Note** from the small selection toolbar.
+The original Markdown is never modified. Notes and an automatically cached
+annotated copy live in Folio's application data directory; the Notes panel can
+export a new `<name>.annotated.md` or open the cached copy. When the source
+changes, Folio warns and re-anchors notes by their quoted text, marking anything
+it cannot match. Details are in [docs/annotations.md](docs/annotations.md).
+
+![Notes beside a document in Folio](docs/images/folio-notes.png)
 
 ## Extending Folio
 
@@ -302,8 +304,8 @@ The UI bundle is intentionally small:
 
 | Asset | Minified | Gzip |
 | --- | ---: | ---: |
-| JavaScript | 43 KB | 13.4 KB |
-| CSS | 40 KB | 8.8 KB |
+| JavaScript | 45 KB | 13.9 KB |
+| CSS | 43 KB | 9.2 KB |
 | Fonts (local WOFF2, Latin + Latin-ext) | ~500 KB | — |
 | Mermaid (lazy, only when diagrams appear) | ~3.6 MB | — |
 
