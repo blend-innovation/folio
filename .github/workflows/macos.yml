@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build UI
+        run: pnpm build:ui
+
       - name: Check and test
         run: |
           cargo fmt --check
@@ -41,9 +44,7 @@ jobs:
           pnpm typecheck
 
       - name: Build universal app and DMG
-        run: |
-          pnpm build:ui
-          pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
