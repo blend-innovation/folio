@@ -50,12 +50,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: folio-macos-universal
-          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
       - name: Upload app
         uses: actions/upload-artifact@v4
         with:
           name: folio-macos-app
-          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/Folio.app
+          path: target/universal-apple-darwin/release/bundle/macos/Folio.app
           if-no-files-found: error
