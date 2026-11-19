@@ -96,6 +96,13 @@ export interface RecentFile {
   openedAt: number;
 }
 
+export interface AppConfig {
+  theme: string | null;
+  matchSystem: boolean | null;
+  textSize: number | null;
+  showOutline: boolean | null;
+}
+
 export interface Bootstrap {
   themes: ThemeCatalog;
   recents: RecentFile[];
@@ -104,6 +111,9 @@ export interface Bootstrap {
   initialDocument?: DocumentPayload | null;
   sampleDocument?: DocumentPayload | null;
   themesDir: string;
+  config: AppConfig;
+  configPath: string;
+  configErrors: string[];
   platform: string;
 }
 

@@ -25,6 +25,8 @@ implementation for document reading, not a redistribution of Blend's code.
 - [notify](https://github.com/notify-rs/notify) — file events (MIT/CC0).
 - [serde](https://serde.rs), [percent-encoding](https://github.com/servo/rust-url),
   [base64](https://github.com/marshallpierce/rust-base64) (MIT/Apache-2.0).
+- [toml](https://github.com/toml-rs/toml) — configuration file parsing
+  (MIT/Apache-2.0).
 - [Mermaid](https://mermaid.js.org) — diagram rendering (MIT). Mermaid is
   loaded on demand and bundles its own dependency tree, including D3 (ISC),
   dagre-d3-es (MIT), DOMPurify (MPL-2.0/Apache-2.0), KaTeX (MIT), Cytoscape

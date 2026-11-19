@@ -458,6 +458,48 @@ await test("HTML and Mermaid snippets can be previewed", async () => {
   await a11y("previews");
 });
 
+await test("configuration pins theme, text size, and rail visibility", async () => {
+  await reset();
+  const base = JSON.parse(
+    await readFile(join(ROOT, "ui/dist/fixtures/bootstrap.json"), "utf8"),
+  );
+  base.config = {
+    theme: "editorial",
+    matchSystem: false,
+    textSize: 1.2,
+    showOutline: false,
+  };
+  await page.setRequestInterception(true);
+  const intercept = (request) => {
+    if (request.url().endsWith("/fixtures/bootstrap.json")) {
+      request.respond({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(base),
+      });
+    } else {
+      request.continue();
+    }
+  };
+  page.on("request", intercept);
+  try {
+    await openApp(page, server.url);
+    const configured = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      scale: document.documentElement.style.getPropertyValue("--f-body-size"),
+      railHidden: document.getElementById("app").classList.contains("is-rail-hidden"),
+      stageWidth: document.querySelector(".stage").getBoundingClientRect().width,
+    }));
+    assert.equal(configured.theme, "editorial");
+    assert.match(configured.scale, /1\.2/);
+    assert.equal(configured.railHidden, true);
+    assert.ok(configured.stageWidth > 1000, `stage width ${configured.stageWidth}`);
+  } finally {
+    page.off("request", intercept);
+    await page.setRequestInterception(false);
+  }
+});
+
 await test("a 700 KB document renders quickly in the webview", async () => {
   await reset();
   const large = JSON.parse(

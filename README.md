@@ -34,6 +34,9 @@ and gives it a page.
 - **A real reading interface.** Sticky contents rail with scroll spy, reading
   progress, find, adjustable text size, code copy, collapsible long snippets,
   and a native menu.
+- **A configuration file, not a settings maze.** Pin a theme, system matching,
+  text size, and rail visibility in `config.toml`. Open it from the app menu or
+  the theme picker; in-app controls keep working when a value is not pinned.
 - **HTML artifacts you can see.** Fenced `html` blocks keep their highlighted
   source and gain **Preview** and **Open** actions. The inline preview is
   sandboxed; **Open** puts it in a separate native window. Scripts and network
@@ -191,9 +194,9 @@ per-diagram Mermaid frontmatter or `init` config is ignored.
 
 ### Your data
 
-Folio stores only preferences, recent-file paths, window state, and themes in
-`~/Library/Application Support/com.folio.reader`. It does not copy, upload, or
-index your documents. The only network requests are remote images referenced by
+Folio stores only preferences, recent-file paths, window state, themes, and an
+optional `config.toml` in `~/Library/Application Support/com.folio.reader`. It
+does not copy, upload, or index your documents. The only network requests are remote images referenced by
 a document and links you choose to open.
 
 ## Themes
@@ -220,6 +223,29 @@ message instead of breaking the app.
 The full token reference and a worked example are in
 [docs/themes.md](docs/themes.md). Themes cannot add arbitrary CSS; they can only
 change the tokens.
+
+## Configuration
+
+Folio also reads an optional `config.toml` next to the themes folder:
+
+```text
+~/Library/Application Support/com.folio.reader/config.toml
+```
+
+Open it from **Folio → Configuration…** or **Open configuration** in the theme
+picker. It can pin any of these launch settings:
+
+```toml
+# theme = "blend"        # built-in or custom theme id
+# matchSystem = true     # follow the light/dark counterpart
+# textSize = 1.0         # 0.85 to 1.5
+# showOutline = true     # show the contents rail on launch
+```
+
+Uncomment a key to pin it; absent keys leave the in-app controls in charge. The
+file is validated before it is applied and is never executed. Restart Folio
+after editing. The full precedence rules, examples, and validation behavior are
+in [docs/configuration.md](docs/configuration.md).
 
 ## Extending Folio
 

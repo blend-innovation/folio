@@ -137,17 +137,18 @@ See `crates/folio-core/tests/render.rs` for the XSS regression suite.
 
 ## IPC contract
 
-The webview talks to the shell through fifteen commands and a handful of events.
+The webview talks to the shell through sixteen commands and a handful of events.
 
 | Command | Result |
 | --- | --- |
-| `bootstrap` | Theme catalog + CSS, recents, version, initial file path, themes folder, platform. |
+| `bootstrap` | Theme catalog + CSS, recents, version, initial file path, themes folder, configuration, platform. |
 | `render_document { path }` | `DocumentPayload` for a file; starts the watcher and records the recent. |
 | `open_file_dialog` | Shows the native picker; renders the selected file or returns `null`. |
 | `open_sample` | Renders the bundled sample document without a watcher. |
 | `read_image { path }` | A raster image as a `data:` URL, or an error. |
 | `open_external { url }` | Hands an allowed URL to the OS. |
 | `open_path { path }` | Opens a local file in its default app. |
+| `open_config` | Creates the config template if needed and opens it in the default editor. |
 | `reveal_themes` | Opens the user theme folder. |
 | `markdown_default_status` | Whether the bundled app is currently the `.md` handler. |
 | `set_markdown_default` | Makes Folio the LaunchServices handler for `.md` / `.markdown`. |
@@ -259,6 +260,19 @@ folio themes scaffold ID
 This is how the end-to-end fixtures are generated, and it keeps the engine
 usable without the app.
 
+## Configuration
+
+`config.toml` lives beside the themes folder and is loaded once during setup,
+after the theme catalog is built so theme ids can be validated. Every key is
+optional; a present key is a pinned override, while a missing key leaves the
+in-app preference in charge. Invalid TOML or values are collected as startup
+warnings, applied as partial fallbacks, and surfaced in the UI without blocking
+launch.
+
+The app never writes the file. That keeps comments and formatting intact and
+avoids turning the theme picker into a configuration editor. The full schema is
+in [configuration.md](configuration.md).
+
 ## Extensibility
 
 There is no plugin runtime in the default app. Themes are the current extension
@@ -276,6 +290,7 @@ security boundaries, and explicit non-goals.
 | `folio-core` unit tests | escaping, slugs, frontmatter, path classification, theme validation, highlighter families |
 | `folio-core` integration | headings, callouts, tables, tasks, figures, footnotes, links, raw HTML, XSS, stats, Unicode, CRLF |
 | `folio-cli` integration | stdout, JSON, `--out`, stdin, errors, theme listing/scaffolding |
-| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, find, clipboard, text size, default-app prompt, responsive rail, HTML preview, Mermaid rendering/theme refresh, axe, large-document timing |
+| `folio-app` unit | image sniffing, path handling, preview titles, configuration parsing |
+| `tests/e2e` | real Chrome: render, outline, scroll spy, themes, auto appearance, configuration pinning, find, clipboard, text size, default-app prompt, responsive rail, HTML preview, Mermaid rendering/theme refresh, axe, large-document timing |
 | criterion | render and highlight throughput across 8 KB/100 KB/1 MB plus no-highlight |
 | `bench/run.mjs` | release CLI wall clock and HTML growth, including process startup |

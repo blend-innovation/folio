@@ -39,6 +39,14 @@ const bootstrap = {
   initialDocument: document,
   sampleDocument: document,
   themesDir: "~/Library/Application Support/com.folio.reader/themes",
+  config: {
+    theme: null,
+    matchSystem: null,
+    textSize: null,
+    showOutline: null,
+  },
+  configPath: "~/Library/Application Support/com.folio.reader/config.toml",
+  configErrors: [],
   platform: "web",
 };
 

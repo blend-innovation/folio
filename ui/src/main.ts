@@ -46,6 +46,7 @@ const themeSwatch = $<HTMLElement>("theme-swatch");
 const themeAuto = $<HTMLButtonElement>("theme-auto");
 const themeNote = $<HTMLElement>("theme-note");
 const themeDir = $<HTMLButtonElement>("theme-dir");
+const configOpen = $<HTMLButtonElement>("config-open");
 const docElement = $<HTMLElement>("doc");
 const welcome = $<HTMLElement>("welcome");
 const recentsWrap = $<HTMLElement>("recents-wrap");
@@ -153,8 +154,16 @@ async function boot(): Promise<void> {
     state.themeById = new Map(state.themes.map((theme) => [theme.id, theme]));
     injectThemeCss(bootData.themes.css);
     restorePreferences(bootData);
+    if (bootData.config.showOutline === false) {
+      app.classList.add("is-rail-hidden");
+    } else {
+      app.classList.remove("is-rail-hidden");
+    }
     buildThemeList();
     applyTheme();
+    if (bootData.configErrors.length > 0) {
+      showToast(`Configuration: ${bootData.configErrors[0]}`);
+    }
     renderRecents(bootData.recents);
 
     document.documentElement.classList.toggle(
@@ -233,6 +242,8 @@ function installEventListeners(): void {
   themeClose.addEventListener("click", () => setThemePanel(false));
   themeAuto.addEventListener("click", toggleAutoTheme);
   themeDir.addEventListener("click", revealThemes);
+  configOpen.addEventListener("click", () => void openConfig());
+  if (!hasTauri()) configOpen.hidden = true;
 
   defaultYes.addEventListener("click", () => void answerDefaultPrompt("yes"));
   defaultNo.addEventListener("click", () => void answerDefaultPrompt("no"));
@@ -342,6 +353,20 @@ function restorePreferences(bootData: Bootstrap): void {
   state.textScale = Number.isFinite(scale)
     ? Math.min(1.5, Math.max(0.85, scale))
     : 1;
+
+  const config = bootData.config;
+  if (
+    config.theme &&
+    catalog.themes.some((theme) => theme.id === config.theme)
+  ) {
+    state.selectedTheme = config.theme;
+  }
+  if (typeof config.matchSystem === "boolean") {
+    state.autoTheme = config.matchSystem;
+  }
+  if (typeof config.textSize === "number" && Number.isFinite(config.textSize)) {
+    state.textScale = Math.min(1.5, Math.max(0.85, config.textSize));
+  }
 
   const params = new URLSearchParams(location.search);
   const paramTheme = params.get("theme");
@@ -540,6 +565,14 @@ function toggleThemePanel(): void {
 async function revealThemes(): Promise<void> {
   try {
     await invoke("reveal_themes");
+  } catch (error) {
+    showToast(errorText(error));
+  }
+}
+
+async function openConfig(): Promise<void> {
+  try {
+    await invoke("open_config");
   } catch (error) {
     showToast(errorText(error));
   }
@@ -1407,6 +1440,9 @@ function performAction(action: string): void {
       break;
     case "toggle-outline":
       toggleRail();
+      break;
+    case "config":
+      void openConfig();
       break;
     case "find":
       if (state.document) {

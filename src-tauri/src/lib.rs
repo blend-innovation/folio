@@ -62,6 +62,15 @@ pub struct DefaultAppStatus {
     pub is_default: bool,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AppConfig {
+    pub theme: Option<String>,
+    pub match_system: Option<bool>,
+    pub text_size: Option<f32>,
+    pub show_outline: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bootstrap {
@@ -71,6 +80,9 @@ pub struct Bootstrap {
     pub initial_path: Option<String>,
     pub themes_dir: String,
     pub platform: String,
+    pub config: AppConfig,
+    pub config_path: String,
+    pub config_errors: Vec<String>,
 }
 
 pub struct AppState {
@@ -82,10 +94,20 @@ pub struct AppState {
     preview_html: Mutex<Option<String>>,
     themes: ThemeCatalog,
     themes_dir: PathBuf,
+    config: AppConfig,
+    config_path: PathBuf,
+    config_errors: Vec<String>,
 }
 
 impl AppState {
-    fn new(themes: ThemeCatalog, recents: Vec<RecentFile>, themes_dir: PathBuf) -> Self {
+    fn new(
+        themes: ThemeCatalog,
+        recents: Vec<RecentFile>,
+        themes_dir: PathBuf,
+        config: AppConfig,
+        config_path: PathBuf,
+        config_errors: Vec<String>,
+    ) -> Self {
         Self {
             initial_path: Mutex::new(None),
             open_lock: Mutex::new(()),
@@ -95,6 +117,9 @@ impl AppState {
             preview_html: Mutex::new(None),
             themes,
             themes_dir,
+            config,
+            config_path,
+            config_errors,
         }
     }
 }
@@ -118,6 +143,9 @@ fn bootstrap(state: State<'_, AppState>) -> Bootstrap {
         initial_path: initial_path.map(|path| path.to_string_lossy().into_owned()),
         themes_dir: state.themes_dir.to_string_lossy().into_owned(),
         platform: std::env::consts::OS.to_string(),
+        config: state.config.clone(),
+        config_path: state.config_path.to_string_lossy().into_owned(),
+        config_errors: state.config_errors.clone(),
     }
 }
 
@@ -297,6 +325,18 @@ fn open_path(app: AppHandle, path: String) -> Result<(), String> {
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_config(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let path = state.config_path.clone();
+    ensure_config_template(&path);
+    if !path.exists() {
+        return Err("The configuration file could not be created.".into());
+    }
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -537,6 +577,73 @@ fn image_mime(bytes: &[u8]) -> Option<&'static str> {
 }
 
 /* --------------------------------------------------------------------------
+Configuration
+-------------------------------------------------------------------------- */
+
+const CONFIG_TEMPLATE: &str = r#"# Folio configuration
+#
+# Uncomment a key to pin it. Pinned values override the in-app setting on
+# launch. Restart Folio after editing. Remove (or comment) a key to go back
+# to the in-app setting.
+#
+# theme = "blend"        # built-in or custom theme id
+# matchSystem = true     # follow the light/dark counterpart
+# textSize = 1.0         # 0.85 to 1.5
+# showOutline = true     # show the contents rail on launch
+"#;
+
+fn ensure_config_template(path: &Path) {
+    if path.exists() {
+        return;
+    }
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(path, CONFIG_TEMPLATE);
+}
+
+fn load_config(path: &Path, themes: &ThemeCatalog) -> (AppConfig, Vec<String>) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return (AppConfig::default(), Vec::new())
+        }
+        Err(error) => {
+            return (
+                AppConfig::default(),
+                vec![format!("Could not read {}: {error}", path.display())],
+            )
+        }
+    };
+
+    let mut config: AppConfig = match toml::from_str(&source) {
+        Ok(config) => config,
+        Err(error) => {
+            return (
+                AppConfig::default(),
+                vec![format!("Invalid configuration: {error}")],
+            )
+        }
+    };
+    let mut errors = Vec::new();
+
+    if let Some(theme) = config.theme.as_deref() {
+        if !themes.themes.iter().any(|item| item.id == theme) {
+            errors.push(format!("Unknown theme \"{theme}\" in configuration."));
+            config.theme = None;
+        }
+    }
+    if let Some(scale) = config.text_size {
+        if !scale.is_finite() || !(0.85..=1.5).contains(&scale) {
+            errors.push("textSize must be between 0.85 and 1.5.".into());
+            config.text_size = None;
+        }
+    }
+
+    (config, errors)
+}
+
+/* --------------------------------------------------------------------------
 Recents
 -------------------------------------------------------------------------- */
 
@@ -631,6 +738,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<Wry>> {
         .about(Some(about))
         .separator()
         .item(&item(app, "settings", "Settings…", Some("CmdOrCtrl+,"))?)
+        .item(&item(app, "config", "Configuration…", None)?)
         .separator()
         .services()
         .separator()
@@ -711,6 +819,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<Wry>> {
 fn handle_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
     let action = match event.id().as_ref() {
         "settings" => "theme",
+        "config" => "config",
         "open" => "open",
         "open-sample" => "open-sample",
         "reload" => "reload",
@@ -809,8 +918,18 @@ pub fn run() {
 
             let theme_set = ThemeSet::builtin().with_user_dirs(std::slice::from_ref(&themes_dir));
             let themes = theme_set.catalog();
+            let config_path = config.join("config.toml");
+            ensure_config_template(&config_path);
+            let (config, config_errors) = load_config(&config_path, &themes);
             let recents = load_recents(app.handle());
-            let state = AppState::new(themes, recents, themes_dir);
+            let state = AppState::new(
+                themes,
+                recents,
+                themes_dir,
+                config,
+                config_path,
+                config_errors,
+            );
             if let Some(path) = initial_path {
                 *state.initial_path.lock().unwrap() = Some(path);
             }
@@ -849,6 +968,7 @@ pub fn run() {
             read_image,
             open_external,
             open_path,
+            open_config,
             reveal_themes,
             markdown_default_status,
             set_markdown_default
@@ -1142,6 +1262,57 @@ mod tests {
 
         let missing = load_document(&dir.path().join("missing.md")).unwrap_err();
         assert!(!missing.is_empty());
+    }
+
+    #[test]
+    fn configuration_values_are_loaded_and_validated() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "theme = \"editorial\"\nmatchSystem = false\ntextSize = 1.1\nshowOutline = false\n",
+        )
+        .unwrap();
+
+        let themes = ThemeSet::builtin().catalog();
+        let (config, errors) = load_config(&path, &themes);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(config.theme.as_deref(), Some("editorial"));
+        assert_eq!(config.match_system, Some(false));
+        assert_eq!(config.show_outline, Some(false));
+        assert!((config.text_size.unwrap() - 1.1).abs() < 0.001);
+    }
+
+    #[test]
+    fn invalid_configuration_is_reported_without_failing_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "theme = \"not-a-theme\"\ntextSize = 2.0\nmatchSystem = true\n",
+        )
+        .unwrap();
+
+        let themes = ThemeSet::builtin().catalog();
+        let (config, errors) = load_config(&path, &themes);
+        assert_eq!(config.theme, None);
+        assert_eq!(config.text_size, None);
+        assert_eq!(config.match_system, Some(true));
+        assert_eq!(errors.len(), 2, "{errors:?}");
+    }
+
+    #[test]
+    fn the_default_configuration_template_is_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        ensure_config_template(&path);
+        let source = std::fs::read_to_string(&path).unwrap();
+        assert!(source.contains("theme = \"blend\""));
+
+        let themes = ThemeSet::builtin().catalog();
+        let (config, errors) = load_config(&path, &themes);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(config.theme, None);
     }
 
     #[test]
