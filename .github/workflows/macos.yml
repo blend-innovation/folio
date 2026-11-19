@@ -3,11 +3,12 @@ name: macOS
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -46,6 +47,12 @@ jobs:
       - name: Build universal app and DMG
         run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
 
+      - name: Package app
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            target/universal-apple-darwin/release/bundle/macos/Folio.app \
+            target/universal-apple-darwin/release/Folio.app.zip
+
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
@@ -59,3 +66,21 @@ jobs:
           name: folio-macos-app
           path: target/universal-apple-darwin/release/bundle/macos/Folio.app
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          assets=(
+            target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            target/universal-apple-darwin/release/Folio.app.zip
+          )
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --title "Folio $tag" \
+              --generate-notes
+          fi
