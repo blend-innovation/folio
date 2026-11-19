@@ -1618,6 +1618,12 @@ mark.find-hit.is-current {
    Notes
    -------------------------------------------------------------------------- */
 
+.app[data-state="welcome"] .notes-btn,
+.app[data-state="welcome"] .topbar-divider,
+.app[data-state="welcome"] #find-btn {
+  display: none;
+}
+
 .topbar-divider {
   width: 1px;
   height: 18px;
