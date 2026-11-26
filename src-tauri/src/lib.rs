@@ -21,6 +21,8 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::StateFlags;
 
+mod update;
+
 const MAX_DOCUMENT_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 24 * 1024 * 1024;
 const MAX_PREVIEW_BYTES: usize = 8 * 1024 * 1024;
@@ -996,6 +998,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<Wry>> {
 
     let app_menu = SubmenuBuilder::new(app, "Folio")
         .about(Some(about))
+        .item(&item(app, "check-updates", "Check for Updates…", None)?)
         .separator()
         .item(&item(app, "settings", "Settings…", Some("CmdOrCtrl+,"))?)
         .item(&item(app, "config", "Configuration…", None)?)
@@ -1079,6 +1082,12 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<Wry>> {
 }
 
 fn handle_menu(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    // Updates are the one menu action with no UI counterpart: the dialog and
+    // the network call both live in the shell.
+    if event.id().as_ref() == "check-updates" {
+        update::check(app.clone());
+        return;
+    }
     let action = match event.id().as_ref() {
         "settings" => "theme",
         "config" => "config",
@@ -1159,6 +1168,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_menu_event(handle_menu)
         .on_window_event(|window, event| {
             #[cfg(target_os = "macos")]

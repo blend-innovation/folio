@@ -5,7 +5,7 @@ description = "Folio — a quiet reader for Markdown."
 authors = ["Folio contributors"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.90"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,6 +24,7 @@ folio-core = { path = "../crates/folio-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
