@@ -44,8 +44,34 @@ jobs:
           cargo test -p folio-app --lib
           pnpm typecheck
 
+      # Signing and update signing are optional: fork and pull-request builds
+      # have no secrets and still produce a DMG. A tag build with the secrets
+      # set additionally signs the app and emits `Folio.app.tar.gz` + `.sig`,
+      # which is what the updater installs.
       - name: Build universal app and DMG
-        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # Tauri treats an empty variable as a configured one, so drop the
+          # blanks before it looks at them.
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD \
+                      APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID \
+                      TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then unset "$name"; fi
+          done
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            pnpm tauri build --target universal-apple-darwin --bundles app,dmg \
+              --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+          fi
 
       - name: Package app
         run: |
@@ -67,6 +93,20 @@ jobs:
           path: target/universal-apple-darwin/release/Folio.app.zip
           if-no-files-found: error
 
+      - name: Build update manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tarball=target/universal-apple-darwin/release/bundle/macos/Folio.app.tar.gz
+          if [ ! -f "$tarball" ]; then
+            echo "::warning::No updater artifact, so this release has no update feed. Set TAURI_SIGNING_PRIVATE_KEY to publish one."
+            exit 0
+          fi
+          node scripts/release-manifest.mjs \
+            --tag "$GITHUB_REF_NAME" \
+            --tarball "$tarball" \
+            --signature "$tarball.sig" \
+            --out target/universal-apple-darwin/release/latest.json
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -77,6 +117,12 @@ jobs:
             target/universal-apple-darwin/release/bundle/dmg/*.dmg
             target/universal-apple-darwin/release/Folio.app.zip
           )
+          # The updater fetches latest.json from `releases/latest/download`, so
+          # the manifest and the artifact it signs must land in the same release.
+          tarball=target/universal-apple-darwin/release/bundle/macos/Folio.app.tar.gz
+          if [ -f "$tarball" ]; then
+            assets+=("$tarball" "$tarball.sig" target/universal-apple-darwin/release/latest.json)
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${assets[@]}" --clobber
           else

@@ -31,7 +31,22 @@ echo "→ building the UI"
 pnpm build:ui
 
 echo "→ building Folio for Apple silicon and Intel"
-pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+# A local update artifact is opt-in: without TAURI_SIGNING_PRIVATE_KEY the
+# build stays a plain DMG, which is what contributors want.
+if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  echo "→ signing the update artifact (TAURI_SIGNING_PRIVATE_KEY is set)"
+  pnpm tauri build --target universal-apple-darwin --bundles app,dmg \
+    --config '{"bundle":{"createUpdaterArtifacts":true}}'
+
+  tarball=src-tauri/target/universal-apple-darwin/release/bundle/macos/Folio.app.tar.gz
+  node scripts/release-manifest.mjs \
+    --tag "v$(node -p "require('./src-tauri/tauri.conf.json').version")" \
+    --tarball "$tarball" \
+    --signature "$tarball.sig" \
+    --out "$(dirname "$tarball")/latest.json"
+else
+  pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+fi
 
 echo
 echo "Folio.app:"
