@@ -37,6 +37,10 @@ and gives it a page.
 - **Marginalia without touching the source.** Select text, add a note, and keep
   the original Markdown untouched. Notes live in a sidecar, detect when the
   original changed, and can be exported or opened as a cached annotated copy.
+- **Updates when you ask.** **Folio → Check for Updates…** reads a signed
+  manifest from GitHub Releases, verifies the download against a public key in
+  the app, and relaunches into the new version. Nothing is fetched at launch.
+  See [docs/updates.md](docs/updates.md).
 - **A configuration file, not a settings maze.** Pin a theme, system matching,
   text size, and rail visibility in `config.toml`. Open it from the app menu or
   the theme picker; in-app controls keep working when a value is not pinned.
@@ -206,7 +210,8 @@ Folio stores preferences, recent-file paths, window state, themes, an optional
 `config.toml`, and annotation sidecars/caches in
 `~/Library/Application Support/com.folio.reader`. It does not copy, upload, or
 index your documents. The only network requests are remote images referenced by
-a document and links you choose to open.
+a document, links you choose to open, and — when you pick **Check for
+Updates…** — the release manifest described in [docs/updates.md](docs/updates.md).
 
 ## Themes
 
@@ -319,8 +324,9 @@ the system. Mermaid is not requested at launch.
 
 ### Downloads
 
-Published releases attach the DMG (`Folio_*.dmg`) and `Folio.app.zip`. The
-**Source code** archives GitHub generates for every tag are source only, not
+Published releases attach the DMG (`Folio_*.dmg`), `Folio.app.zip`, and — on
+signed builds — the updater's `Folio.app.tar.gz`, its `.sig`, and `latest.json`.
+The **Source code** archives GitHub generates for every tag are source only, not
 applications. Actions artifacts are temporary; use the DMG or app zip from a
 release for a permanent download. The direct Actions artifacts are also
 available from the workflow run page and expire automatically.
@@ -381,7 +387,7 @@ crates/folio-core/     Markdown renderer, highlighter, paths, themes (Rust)
 crates/folio-cli/      `folio` command-line renderer
 src-tauri/             macOS shell: window, menu, watcher, IPC
 ui/                    Vanilla TypeScript UI and the document stylesheet
-docs/                  Design, theme, plugin, performance, and architecture notes
+docs/                  Design, theme, plugin, update, performance, and architecture notes
 tests/e2e/             Chrome end-to-end, accessibility, and screenshot suite
 bench/                 CLI benchmark harness and corpora
 ```

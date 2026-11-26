@@ -17,6 +17,7 @@ Folio is three small programs in one repository:
 │ folio-app (Tauri shell)    │
 │ window · menu · dialogs    │
 │ watcher · recents · images │
+│ updates                    │
 └─────────────┬──────────────┘
               │  invoke / events
 ┌─────────────▼──────────────┐
@@ -290,6 +291,15 @@ launch.
 The app never writes the file. That keeps comments and formatting intact and
 avoids turning the theme picker into a configuration editor. The full schema is
 in [configuration.md](configuration.md).
+
+## Updates
+
+The shell owns the only network call it ever originates: **Check for Updates…**
+asks GitHub Releases for `latest.json`, then downloads and verifies a signed
+`Folio.app.tar.gz` before replacing the bundle and relaunching. Neither the check
+nor the dialog is reachable from the WebView, and copying the tarball into place
+is done by the updater plugin, not by Folio's own code. The release pipeline,
+secrets, and the signing chain are in [updates.md](updates.md).
 
 ## Extensibility
 
